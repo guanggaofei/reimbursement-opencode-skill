@@ -11,25 +11,6 @@
 - 连号发票需要的支付记录 DOCX
 - 必要时的支付说明 DOCX
 
-## 安装到 opencode 项目
-
-这个仓库包含一个 opencode skill 和配套 subagent。安装到新的报销项目时，只需要复制两部分内容：
-
-```text
-.opencode/skills/reimbursement/
-.opencode/agents/
-```
-
-推荐让 opencode agent 执行安装。可以直接对 agent 说：
-
-```text
-请从 GitHub 仓库安装 reimbursement opencode skill：
-1. 将 .opencode/skills/reimbursement 复制到当前项目的 .opencode/skills/reimbursement
-2. 将 .opencode/agents 下的 fix-*.md 复制到当前项目的 .opencode/agents
-3. 不要复制 invoices、images、OCR缓存.json、匹配记录.json 或任何报销结果文件
-4. 安装后读取 README.md，按说明检查 invoices/ 和 images/ 输入目录
-```
-
 手动安装时，在目标项目根目录放置为：
 
 ```text
@@ -44,7 +25,8 @@
 │       ├── fix-shop-name-ambiguity.md
 │       └── fix-trip-ambiguity.md
 ├── invoices/
-└── images/
+├── images/
+└── 第x批报账单.xlsx      # 可选：历史批次报账单，用于跨批去重
 ```
 
 安装后，用户只需要向 `invoices/` 和 `images/` 添加文件。`匹配记录.json`、`OCR缓存.json` 和最终报销材料会在流程运行时生成。
@@ -74,7 +56,7 @@ invoice/
 
 ## 准备发票和行程单
 
-把所有 PDF 放入 `invoices/`。
+把所有 PDF 放入 `invoices/`。放入后禁止删除或重命名文件，只允许添加文件。
 
 材料费发票：
 
@@ -89,7 +71,7 @@ invoice/
 
 ## 准备截图文件夹
 
-把所有截图原图放入 `images/`，示例截图文件见 `example_images/`。
+把所有截图原图放入 `images/`，示例截图文件见 `example_images/`。放入后禁止删除或重命名文件，只允许添加文件。
 
 截图可以使用 `.png`、`.jpg`、`.jpeg` 等常见图片格式。建议保留手机截图原图，不要裁剪、压缩或重命名到很复杂的路径。
 
@@ -217,38 +199,7 @@ source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organ
 - `支付记录/*.docx`
 - `支付说明/*.docx`
 
-## 验证输出
-
-验证支出记录 DOCX：
-
-```bash
-python -c "import zipfile; assert zipfile.ZipFile('Hello World 2026支出记录填写结果.docx').testzip() is None; print('DOCX OK')"
-```
-
-验证报账单 XLSX：
-
-```bash
-python -c "import zipfile; assert zipfile.ZipFile('Hello World 2026报账单填写结果.xlsx').testzip() is None; print('XLSX OK')"
-```
-
-验证支付记录和支付说明 DOCX：
-
-```bash
-python - <<'PY'
-import zipfile
-from pathlib import Path
-for pattern in ['支付记录/*.docx', '支付说明/*.docx']:
-    for path in Path('.').glob(pattern):
-        assert zipfile.ZipFile(path).testzip() is None, path
-        print(path, 'OK')
-PY
-```
-
 ## 常见问题
-
-### OCR 把年份识别成金额怎么办？
-
-当前脚本对支付记录只在截图顶部状态栏以下、`支付时间` 上方区域取金额，通常可以避免把 `2026` 识别成金额。如果仍然出现错误，查看 `OCR缓存.json` 中对应图片的 `ocr_text` 和 `ocr_boxes`。
 
 ### 为什么某张截图没有自动匹配？
 
@@ -281,14 +232,6 @@ python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --ro
 python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
 ```
 
-### 可以修改图片文件名吗？
-
-可以，但不建议频繁改。`OCR缓存.json` 的 key 使用 `images/<原图片名>`，文件名变化会让脚本把它当成新图片处理。
-
-### 可以删除 images 里的原图吗？
-
-不要删除已经匹配的原图。最终 DOCX 会直接从 `images/` 原路径读取图片。
-
 ### 可以手动编辑匹配记录吗？
 
 可以，但要小心保持路径格式：
@@ -303,5 +246,3 @@ python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root
 - 每次开始前先备份或提交重要状态文件。
 - 不要把 `OCR缓存.json` 和 `匹配记录.json` 当作临时文件随手删除。
 - 截图尽量一次性收齐，但后续补图用 `--scan-only`。
-- 每次补图或人工修复后都运行覆盖率检查。
-- 最终生成 DOCX/XLSX 后做 zip 校验。
