@@ -51,7 +51,6 @@ import argparse
 import hashlib
 import json
 import re
-import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -445,57 +444,6 @@ def choose_unique_trip(candidates: list[TripEntry], platform: str = "") -> tuple
     return None, f"金额对应多个候选行程，交由后处理视觉识别：{candidate_names}"
 
 
-def next_target_path(base: Path, used: set[Path], allow_existing: bool = False) -> Path:
-    if allow_existing and base not in used:
-        used.add(base)
-        return base
-    if base not in used and not base.exists():
-        used.add(base)
-        return base
-    stem = base.stem
-    suffix = base.suffix
-    index = 1
-    while True:
-        candidate = base.with_name(f"{stem}_{index}{suffix}")
-        if allow_existing and candidate not in used:
-            used.add(candidate)
-            return candidate
-        if candidate not in used and not candidate.exists():
-            used.add(candidate)
-            return candidate
-        index += 1
-
-
-def assign_targets(matches: list[ImageMatch], records_root: Path, overwrite: bool) -> None:
-    groups: dict[tuple[int, str, str], list[ImageMatch]] = defaultdict(list)
-    for match in matches:
-        if match.status == "copy" and match.invoice is not None:
-            key = (match.invoice.seq, match.kind)
-            groups[key].append(match)
-
-    used_targets: set[Path] = set()
-    for group in groups.values():
-        group.sort(key=lambda match: match.image.name)
-        multiple = len(group) > 1
-        for index, match in enumerate(group, 1):
-            assert match.invoice is not None
-            stem = f"{match.invoice.seq}_{match.kind}"
-            if match.invoice.is_taxi and match.trip_item_index is not None:
-                stem = f"{stem}_{match.trip_item_index}"
-            elif multiple:
-                stem = f"{stem}_{index}"
-            category = match.invoice.output_dir.name if match.invoice.output_dir.name else "未分类"
-            base = records_root / category / f"{stem}{match.image.suffix.lower()}"
-            match.target = next_target_path(base, used_targets, allow_existing=overwrite)
-
-    pending = [match for match in matches if match.status == "pending"]
-    for match in pending:
-        subdir = "打车" if match.ocr_category.startswith("打车") else "非打车"
-        price_tag = f"_{money_token(match.amount)}" if match.amount is not None else ""
-        base = records_root / "待人工识别" / subdir / f"待识别{price_tag}_{match.image.name}"
-        match.target = next_target_path(base, used_targets, allow_existing=overwrite)
-
-
 def match_images(args: argparse.Namespace) -> tuple[list[ImageMatch], list[Invoice], list[TripEntry]]:
     invoices = read_invoices(args.sorted_json, args.output)
     amount_to_invoices: dict[Decimal, list[Invoice]] = defaultdict(list)
@@ -652,17 +600,13 @@ def unmatched_invoices(matches: list[ImageMatch], invoices: list[Invoice]) -> li
 AI_REPORT_NAME = "支出记录OCR匹配明细.md"
 HUMAN_REPORT_NAME = "支出记录OCR整理结果.md"
 
-IMAGE_RE = re.compile(r"^(\d+)_(支付记录|账单截图)(?:_\d+)?\.(?:jpe?g|png)$", re.IGNORECASE)
-PENDING_RE = re.compile(r"^待识别_(\d+(?:\.\d{1,2})?)_(.+)$")
-
-
 def write_ai_report(matches: list[ImageMatch], root: Path, applied: bool) -> None:
     """Pending-only screenshot list — for AI/人工 diagnosis."""
     path = root / AI_REPORT_NAME
     lines: list[str] = [
         "# 支出记录 OCR 待处理截图明细",
         "",
-        f"模式：{'已复制' if applied else 'dry-run'}",
+        f"模式：{'已写入匹配记录' if applied else 'dry-run'}",
         "",
         "## 待人工识别截图",
         "",
@@ -679,94 +623,6 @@ def write_ai_report(matches: list[ImageMatch], root: Path, applied: bool) -> Non
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def report_only(args: argparse.Namespace) -> None:
-    """Regenerate reports from current filesystem state — no OCR, no matching."""
-    invoices = read_invoices(args.sorted_json, args.output)
-
-    # Scan matched files in 1_材料费/ and 2_打车费/
-    matched: dict[int, set[str]] = defaultdict(set)
-    matched_trips: set[tuple[int, int]] = set()
-    for root_dir in (args.records_root / "1_材料费", args.records_root / "2_打车费"):
-        if not root_dir.exists():
-            continue
-        for p in root_dir.iterdir():
-            m = IMAGE_RE.match(p.name)
-            if not m:
-                continue
-            seq = int(m.group(1))
-            kind = m.group(2)
-            matched[seq].add(kind)
-            # For taxi, also track trip item index
-            parts = p.stem.split("_")
-            if len(parts) >= 3 and parts[2].isdigit():
-                matched_trips.add((seq, int(parts[2])))
-
-    # Read trip entries from 行程单数据.json
-    trip_path = args.root / "行程单数据.json"
-    all_trip_entries: list[TripEntry] = []
-    if trip_path.exists():
-        trips_dict = json.loads(trip_path.read_text(encoding="utf-8"))
-        for fname, trip_list in trips_dict.items():
-            if not isinstance(trip_list, list):
-                continue
-            for trip in trip_list:
-                seq = trip.get("发票输出序号")
-                item_index = trip.get("序号")
-                amount = money(trip.get("金额"))
-                if seq is None or item_index is None or amount is None:
-                    continue
-                inv = next((inv for inv in invoices if inv.seq == seq), None)
-                if inv is None:
-                    continue
-                all_trip_entries.append(TripEntry(invoice=inv, item_index=item_index, amount=amount))
-
-    # Scan pending files in 待人工识别/
-    pending_matches: list[ImageMatch] = []
-    for subdir in ("打车", "非打车"):
-        pending_dir = args.records_root / "待人工识别" / subdir
-        if not pending_dir.exists():
-            continue
-        for p in sorted(pending_dir.iterdir()):
-            m = PENDING_RE.match(p.name)
-            amount = money(m.group(1)) if m else None
-            ocr_category = f"打车" if subdir == "打车" else "非打车"
-            pending_matches.append(ImageMatch(
-                image=p,
-                kind="",
-                ocr_category=ocr_category,
-                taxi_platform="",
-                amount=amount,
-                invoice=None,
-                target=p,
-                status="pending",
-                reason="",
-                ocr_text="",
-                payment_date="",
-            ))
-
-    # Build fake matches list for write_human_report completeness check
-    fake_matches: list[ImageMatch] = []
-    for inv in invoices:
-        for kind in matched.get(inv.seq, set()):
-            fake_matches.append(ImageMatch(
-                image=Path(""),
-                kind=kind,
-                ocr_category="",
-                taxi_platform="",
-                amount=None,
-                invoice=inv,
-                target=None,
-                status="copy",
-                reason="",
-                ocr_text="",
-                payment_date="",
-            ))
-
-    write_human_report(fake_matches + pending_matches, invoices, all_trip_entries, args.root, True)
-    write_ai_report(fake_matches + pending_matches, args.root, True)
-    print(f"报告已更新：{AI_REPORT_NAME}、{HUMAN_REPORT_NAME}")
-
-
 def write_human_report(matches: list[ImageMatch], invoices: list[Invoice], all_trip_entries: list[TripEntry], root: Path, applied: bool) -> None:
     """Summary tables for human review."""
     path = root / HUMAN_REPORT_NAME
@@ -774,7 +630,7 @@ def write_human_report(matches: list[ImageMatch], invoices: list[Invoice], all_t
     lines: list[str] = [
         "# 支出记录 OCR 整理结果",
         "",
-        f"模式：{'已复制' if applied else 'dry-run'}",
+        f"模式：{'已写入匹配记录' if applied else 'dry-run'}",
     ]
 
     lines.extend(["", "## 未匹配到截图的发票", ""])
@@ -824,23 +680,6 @@ def write_human_report(matches: list[ImageMatch], invoices: list[Invoice], all_t
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_purchase_dates(matches: list[ImageMatch], path: Path) -> None:
-    dates: dict[str, str] = {}
-    payment_matches = [
-        match
-        for match in matches
-        if match.status == "copy"
-        and match.invoice is not None
-        and match.kind == "支付记录"
-        and match.payment_date
-    ]
-    payment_matches.sort(key=lambda match: str(match.target or match.image.name))
-    for match in payment_matches:
-        assert match.invoice is not None
-        dates.setdefault(match.invoice.updated_file, match.payment_date)
-    path.write_text(json.dumps(dates, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
 def invoice_as_dict(inv: Invoice) -> dict[str, object]:
     return {
         "文件名": inv.source_file,
@@ -884,21 +723,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--invoices-dir", type=Path, default=Path("invoices"))
     parser.add_argument("--sorted-json", type=Path, default=Path("invoice_results_sorted.json"))
     parser.add_argument("--output", type=Path, default=Path("output"))
-    parser.add_argument("--records-root", type=Path, default=Path("支出记录整理"), help="deprecated; kept for CLI compatibility")
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
-    parser.add_argument("--purchase-dates", type=Path, default=Path("支出记录购买日期.json"), help="deprecated; dates are stored in 匹配记录.json")
     scan_group = parser.add_mutually_exclusive_group()
     scan_group.add_argument("--no-cache", action="store_true", help="skip OCR cache, force full OCR")
     scan_group.add_argument("--scan-only", action="store_true", help="process only new images (not in cache): update 匹配记录.json, print conflicts/unmatched")
     parser.add_argument("--cache-file", type=Path, default=Path("OCR缓存.json"))
-    parser.add_argument("--dry-run", action="store_true", help="preview matches without copying files")
-    parser.add_argument("--no-clean", action="store_true", help="keep existing records-root and report before running")
-    parser.add_argument("--overwrite", action="store_true", help="allow overwriting existing target files when --no-clean is used")
-    parser.add_argument("--report-only", action="store_true", help="regenerate reports from filesystem state without OCR or matching")
+    parser.add_argument("--dry-run", action="store_true", help="preview matches without writing 匹配记录.json")
+    parser.add_argument("--no-clean", action="store_true", help="keep existing reports before running")
     return parser.parse_args()
 
 
-def clean_previous_outputs(root: Path, records_root: Path, purchase_dates_path: Path) -> None:
+def clean_previous_outputs(root: Path) -> None:
     """Remove stale OCR outputs before a normal run."""
     removed: list[str] = []
     for name in (HUMAN_REPORT_NAME, AI_REPORT_NAME):
@@ -958,16 +793,10 @@ def main() -> int:
     args.invoices_dir = resolve_path(root, args.invoices_dir)
     args.sorted_json = resolve_path(root, args.sorted_json)
     args.output = resolve_path(root, args.output)
-    args.records_root = resolve_path(root, args.records_root)
     args.match_record = resolve_path(root, args.match_record)
-    args.purchase_dates = resolve_path(root, args.purchase_dates)
     args.cache_file = resolve_path(root, args.cache_file)
     apply_changes = not args.dry_run and not args.scan_only
     no_clean = args.no_clean or args.scan_only
-
-    if args.report_only:
-        report_only(args)
-        return 0
 
     # Snapshot cached hashes before processing (for scan-only)
     cached_images_before: set[str] = set()
@@ -975,7 +804,7 @@ def main() -> int:
         cached_images_before = {key for key in json.loads(args.cache_file.read_text(encoding="utf-8")).keys() if key.startswith("images/")}
 
     if apply_changes and not no_clean:
-        clean_previous_outputs(root, args.records_root, args.purchase_dates)
+        clean_previous_outputs(root)
 
     matches, invoices, all_trip_entries = match_images(args)
 

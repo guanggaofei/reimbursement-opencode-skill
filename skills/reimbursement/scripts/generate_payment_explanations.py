@@ -443,7 +443,6 @@ def main() -> int:
     parser.add_argument("--report", type=Path, default=Path("支付说明生成结果.md"))
     parser.add_argument("--ocr-cache", type=Path, default=Path("OCR缓存.json"), help="OCR cache JSON (keyed by images/<原图片名>)")
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
-    parser.add_argument("--records-dir", type=Path, default=Path("支出记录整理"), help="deprecated")
     parser.add_argument("--no-unpack", action="store_true")
     args = parser.parse_args()
 
@@ -456,8 +455,6 @@ def main() -> int:
     args.report = resolve_path(root, args.report)
     args.ocr_cache = resolve_path(root, args.ocr_cache)
     args.match_record = resolve_path(root, args.match_record)
-    args.records_dir = resolve_path(root, args.records_dir)
-
     year, month, day = (int(part) for part in args.date.split("-"))
     payee_map = dict(SELLER_PAYEE_MAP)
     for entry in args.payee:

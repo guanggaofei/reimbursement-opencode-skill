@@ -55,7 +55,6 @@ source .venv/bin/activate
 | `scripts/generate_payment_explanations.py` | XML 级别的支付说明 DOCX 生成器。 |
 | `scripts/extract_trip_sheets.py` | 从行程单 PDF 中提取行程数据到 JSON。 |
 | `scripts/apply_invoice_fixes.py` | 将 `invoice_fixes.json` 中的修复批量写入 `invoice_results.json`（步骤 5）。 |
-| `scripts/apply_file_operations.py` | 兼容旧 `文件操作指令.json`，将手动匹配操作写入 `匹配记录.json`；不移动、不删除图片（步骤 8）。 |
 | `scripts/verify_screenshot_coverage.py` | 验证截图覆盖率，读取 `匹配记录.json` 与 `invoice_results_sorted.json` + `行程单数据.json` 交叉比对，输出缺失报告（步骤 8）。 |
 
 ### 内置 subagent（文件位于 `.opencode/agents/`）
@@ -71,7 +70,6 @@ source .venv/bin/activate
 ### 内置资源
 
 - `assets/templates/` — 内置模板；无需在根目录放置模板。
-- `assets/image_samples/` — 示例截图。
 
 ### 项目输入目录
 
@@ -94,8 +92,7 @@ source .venv/bin/activate
 rm -rf output/
 rm -f invoice_results.json invoice_results_sorted.json invoice_errors.json
 rm -f 行程单数据.json
-rm -rf 支出记录整理/
-rm -f 支出记录OCR整理结果.md 支出记录OCR匹配明细.md 支出记录购买日期.json
+rm -f 支出记录OCR整理结果.md 支出记录OCR匹配明细.md
 rm -f Hello World 2026报账单填写结果.xlsx Hello World 2026支出记录填写结果.docx 支出记录DOCX生成结果.md
 rm -rf 支付记录/ 支付说明/
 ```
@@ -196,7 +193,7 @@ python .opencode/skills/reimbursement/scripts/extract_trip_sheets.py --root .
 
 > **注意：** 对 300 多张截图运行 OCR 需要 10 分钟以上，可能被 CLI 超时中断。**始终让用户手动运行此步骤** — opencode 不得执行此命令。
 
-读取 `images/`、`invoice_results_sorted.json` 和 `output/`。写入 `匹配记录.json`、`支出记录OCR整理结果.md`、`支出记录OCR匹配明细.md`。维护 `OCR缓存.json` 以支持增量运行 — 仅对新增或修改的截图重新 OCR。**不再生成 `支出记录整理/`，不复制、不重命名图片。**
+读取 `images/`、`invoice_results_sorted.json` 和 `output/`。写入 `匹配记录.json`、`支出记录OCR整理结果.md`、`支出记录OCR匹配明细.md`。维护 `OCR缓存.json` 以支持增量运行 — 仅对新增或修改的截图重新 OCR。**不创建额外的截图整理目录，不复制、不重命名图片。**
 
 **注意：** `OCR缓存.json` 以 `images/<原图片名>` 作为键，条目内保留 `sha256` 用于判断文件内容是否变化。要查询截图 OCR 文本，直接用 `images/IMG_xxx.png` 索引缓存。
 
@@ -284,12 +281,6 @@ source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organ
 - `未匹配截图[]` 只写 `图片` 和 `原因`；需要金额、类型、打车平台时查 `OCR缓存.json`。
 - 不要把 `更新后文件名`、`发票序号`、金额、类型、打车平台、服务商、车型、上车时间写入 `匹配记录.json`。
 - 不删除 `images/` 中任何文件。
-
-兼容旧 subagent 输出时，可运行以下脚本将 `文件操作指令.json` 转写到 `匹配记录.json`。正常新流程不需要它：
-```bash
-python .opencode/skills/reimbursement/scripts/apply_file_operations.py .
-```
-脚本不会清空 `文件操作指令.json`，只会为已处理操作打 `已执行` 标记。
 
 #### 8.3. 分析：`金额对应多个候选发票`（店铺名称比较）
 

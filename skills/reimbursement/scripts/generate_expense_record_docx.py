@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the expense-record DOCX table from organized screenshots."""
+"""Generate the expense-record DOCX table from 匹配记录.json."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import argparse
 import copy
 import json
 import mimetypes
-import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,11 +31,6 @@ CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 EMU_PER_CM = 360000
 IMAGE_WIDTH_CM = 9
-
-IMAGE_RE = re.compile(
-    r"^(?P<order>\d+)_(?P<kind>账单截图|支付记录)(?:_\d+)?\.(?P<ext>jpe?g|png)$",
-    re.IGNORECASE,
-)
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -125,29 +119,6 @@ def image_aspect_from_file(path: Path, fallback: float) -> float:
     except Exception:
         pass
     return fallback
-
-
-def organized_images(records_dir: Path, max_order: int) -> tuple[dict[int, RowImages], list[str]]:
-    rows: dict[int, RowImages] = {index: RowImages() for index in range(1, max_order + 1)}
-    skipped: list[str] = []
-
-    for path in sorted(records_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        match = IMAGE_RE.match(path.name)
-        if not match:
-            continue
-        order = int(match.group("order"))
-        kind = match.group("kind")
-        if order < 1 or order > max_order:
-            skipped.append(f"{path.name}: order {order} outside 1..{max_order}")
-            continue
-        if kind == "账单截图":
-            rows[order].bills.append(path)
-        else:
-            rows[order].payments.append(path)
-
-    return rows, skipped
 
 
 def images_from_match_record(root_dir: Path, match_record: Path, invoice_json: Path) -> tuple[dict[int, RowImages], list[str]]:
@@ -328,7 +299,6 @@ def set_cell_pictures(
 def generate(args: argparse.Namespace) -> None:
     root_dir = args.root.resolve()
     template = resolve_path(root_dir, Path(args.template))
-    records_dir = resolve_path(root_dir, Path(args.records_dir))
     match_record = resolve_path(root_dir, Path(args.match_record))
     invoice_json = resolve_path(root_dir, Path(args.invoice_json))
     picture_template = resolve_path(root_dir, Path(args.picture_template))
@@ -356,10 +326,9 @@ def generate(args: argparse.Namespace) -> None:
     for row in rows[1:]:
         table.remove(row)
 
-    if match_record.exists():
-        images_by_order, skipped = images_from_match_record(root_dir, match_record, invoice_json)
-    else:
-        images_by_order, skipped = organized_images(records_dir, count)
+    if not match_record.exists():
+        raise RuntimeError(f"match record not found: {match_record}")
+    images_by_order, skipped = images_from_match_record(root_dir, match_record, invoice_json)
     width_emu = IMAGE_WIDTH_CM * EMU_PER_CM
     height_emu = round(width_emu * image_aspect_from_paragraph(bill_source))
     rel_id_number = next_relationship_id(rels_root)
@@ -449,7 +418,6 @@ def parse_args() -> argparse.Namespace:
     add_root_arg(parser)
     parser.add_argument("--template", default=DEFAULT_TEMPLATE)
     parser.add_argument("--match-record", default=DEFAULT_MATCH_RECORD)
-    parser.add_argument("--records-dir", default="支出记录整理", help="deprecated fallback if 匹配记录.json is absent")
     parser.add_argument("--invoice-json", default="invoice_results_sorted.json")
     parser.add_argument("--picture-template", default=DEFAULT_TEMPLATE)
     parser.add_argument("--output", default="Hello World 2026支出记录填写结果.docx")

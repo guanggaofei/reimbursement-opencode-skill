@@ -118,12 +118,6 @@ def read_purchase_dates_from_record(path: Path, invoices: list[dict[str, Any]]) 
     return dates
 
 
-def read_purchase_dates(path: Path) -> dict[str, str]:
-    if path.exists():
-        return {str(k): str(v) for k, v in read_json(path).items()}
-    return {}
-
-
 def build_rows(invoices: list[dict[str, Any]], purchase_dates: dict[str, str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for inv in invoices:
@@ -244,10 +238,9 @@ def generate(args: argparse.Namespace) -> None:
     if not invoices:
         raise RuntimeError("No invoices found in sorted JSON")
     match_record = resolve_path(root, args.match_record)
-    if match_record.exists():
-        purchase_dates = read_purchase_dates_from_record(match_record, invoices)
-    else:
-        purchase_dates = read_purchase_dates(resolve_path(root, args.dates_json))
+    if not match_record.exists():
+        raise RuntimeError(f"match record not found: {match_record}")
+    purchase_dates = read_purchase_dates_from_record(match_record, invoices)
     rows = build_rows(invoices, purchase_dates)
 
     files = read_zip(resolve_path(root, args.template))
@@ -294,7 +287,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--sorted-json", type=Path, default=DEFAULT_SORTED_JSON)
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
-    parser.add_argument("--dates-json", type=Path, default=Path("支出记录购买日期.json"), help="deprecated fallback if 匹配记录.json is absent")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser.parse_args()
 
