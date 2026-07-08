@@ -1,6 +1,6 @@
 # 报销材料整理使用说明
 
-推荐使用opencode
+推荐使用 opencode。
 
 本项目用于把发票 PDF、打车行程单和费用截图整理成报销所需材料，包括：
 
@@ -10,6 +10,18 @@
 - 报账单 XLSX
 - 连号发票需要的支付记录 DOCX
 - 必要时的支付说明 DOCX
+
+## 给 AI 的安装指南（让 opencode agent 安装）
+
+如果你是在 opencode 中阅读此仓库，请让当前 opencode agent 执行以下安装操作：
+
+1. 将 `skills/reimbursement` 复制到当前项目根目录的 `.opencode/skills/reimbursement`。
+2. 将 `agents/` 下的所有 `fix-*.md` 文件复制到当前项目根目录的 `.opencode/agents/`。
+3. 检查目标项目根目录是否存在 `invoices/` 和 `images/` 目录，若不存在则创建。
+4. 读取此 README 的剩余内容，了解 `invoices/` 和 `images/` 的准备要求。
+5. 不要复制此仓库中的 `example_images/`、`assets/`、`templates/` 以外的任何文件。
+
+安装完成后，告知用户项目结构已就绪，可以开始放入发票和截图。
 
 手动安装时，在目标项目根目录放置为：
 
