@@ -1,8 +1,8 @@
 # 报销材料整理使用说明
 
-推荐使用 opencode。
+> 仓库地址：<https://github.com/guanggaofei/reimbursement-opencode-skill>
 
-本项目用于把发票 PDF、打车行程单和费用截图整理成报销所需材料，包括：
+本项目是一个 **opencode skill**，用于把发票 PDF、打车行程单和费用截图整理成报销所需材料，包括：
 
 - 分类后的发票文件
 - 截图匹配记录
@@ -11,37 +11,82 @@
 - 连号发票需要的支付记录 DOCX
 - 必要时的支付说明 DOCX
 
-## 给 AI 的安装指南（让 opencode agent 安装）
+## 安装指南（给Agent看的）
 
-如果你是在 opencode 中阅读此仓库，请让当前 opencode agent 执行以下安装操作：
+当用户要求你安装此报销 skill 时，克隆本仓库后阅读此节，按以下步骤安装：
 
-1. 将 `skills/reimbursement` 复制到当前项目根目录的 `.opencode/skills/reimbursement`。
-2. 将 `agents/` 下的所有 `fix-*.md` 文件复制到当前项目根目录的 `.opencode/agents/`。
-3. 检查目标项目根目录是否存在 `invoices/` 和 `images/` 目录，若不存在则创建。
-4. 读取此 README 的剩余内容，了解 `invoices/` 和 `images/` 的准备要求。
-5. 不要复制此仓库中的 `example_images/`、`assets/`、`templates/` 以外的任何文件。
+### 1. 确定目标目录
 
-安装完成后，告知用户项目结构已就绪，可以开始放入发票和截图。
+当前工作目录就是用户报销项目的根目录。
 
-手动安装时，在目标项目根目录放置为：
+### 2. 复制 skill
+
+```bash
+mkdir -p .opencode/skills/reimbursement
+cp -r skills/reimbursement/* .opencode/skills/reimbursement/
+```
+
+### 3. 复制 subagent
+
+```bash
+mkdir -p .opencode/agents
+cp agents/fix-*.md .opencode/agents/
+```
+
+### 4. 创建输入目录
+
+```bash
+mkdir -p invoices images
+```
+
+### 5. 告知用户
+
+安装完成。请关闭当前对话，新开一个对话，skill 就会生效。之后把发票 PDF 放入 `invoices/`，支付截图放入 `images/`，就可以开始报销流程了。
+
+## 安装指南（给人看的）
+
+### 什么是 opencode skill？
+
+opencode 是一个 AI 编程助手。它有一种叫 **skill** 的机制——把一份 `SKILL.md` 放到指定文件夹，opencode 就能自动发现它。agent 在对话中看到匹配的 skill 时，会加载里面的指令来帮你完成任务。
+
+本仓库就是一个 skill，安装后 opencode agent 会自动理解报销流程、知道该调用什么脚本、该怎么处理你的发票和截图。
+
+### 安装方法
+
+#### 方法一：让 agent 帮你安装（推荐，最简单）
+
+在 opencode 中打开你的报销项目文件夹（将来放发票和截图的那个文件夹），然后对 agent 说：
+
+> 请帮我安装报销 skill，仓库在 <https://github.com/guanggaofei/reimbursement-opencode-skill>，根据 README.md 安装。
+
+#### 方法二：自己手动安装
+
+如果你不想用 agent，也可以直接复制文件：
+
+1. 下载或克隆本仓库。
+2. 在**目标项目**（将来放发票的文件夹）根目录下，创建以下目录结构：
 
 ```text
 目标项目/
 ├── .opencode/
 │   ├── skills/
-│   │   └── reimbursement/
+│   │   └── reimbursement/     ← 从本仓库复制 skills/reimbursement/ 整个文件夹过来
 │   └── agents/
 │       ├── fix-bearing-invoice.md
 │       ├── fix-duplicate-screenshots.md
 │       ├── fix-invoice-errors.md
 │       ├── fix-shop-name-ambiguity.md
 │       └── fix-trip-ambiguity.md
-├── invoices/
-├── images/
-└── 第x批报账单.xlsx      # 可选：历史批次报账单，用于跨批去重
+├── invoices/                   ← 将来放发票 PDF
+├── images/                     ← 将来放支付截图
+└── 第x批报账单.xlsx            ← (可选) 历史批次报账单，用于跨批去重
 ```
 
-安装后，用户只需要向 `invoices/` 和 `images/` 添加文件。`匹配记录.json`、`OCR缓存.json` 和最终报销材料会在流程运行时生成。
+### 安装后
+
+- 关闭当前的 opencode 对话，**新开一个对话**。skill 就会生效了（不需要重启 opencode）。
+- 安装后，你只需要向 `invoices/` 和 `images/` 添加文件。`匹配记录.json`、`OCR缓存.json` 和最终报销材料会在流程运行时自动生成。
+- 不要复制本仓库的 `example_images/`、`assets/`、`templates/` 以外的任何文件到目标项目。
 
 ## 目录结构
 
