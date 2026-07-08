@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""Generate a payment-record DOCX with one large title and stacked images.
+
+When ``--images`` is given, works in manual mode (original behaviour).
+When ``--images`` is omitted, reads ``invoice_errors.json`` to discover
+连号发票 groups automatically, collects payment-record screenshots for each,
+and generates one DOCX per group.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from pathlib import Path
+
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm, Pt
+from docx.oxml.ns import qn
+
+from _pathutil import add_root_arg, resolve_path
+from _matching_records import DEFAULT_MATCH_RECORD, image_paths, invoice_key, load_match_record
+
+
+DEFAULT_OUTPUT = Path("支付记录/xxx_17-24_支付记录.docx")
+DEFAULT_TITLE = "xxx 17-24 支付记录"
+DEFAULT_WIDTH_CM = 4.0
+DEFAULT_ERRORS = Path("invoice_errors.json")
+DEFAULT_RESULTS = Path("invoice_results_sorted.json")
+DEFAULT_RECORDS_DIR = Path("支出记录整理")
+
+
+def display_index(inv: dict) -> int:
+    name = str(inv.get("更新后文件名") or "")
+    m = re.match(r"(\d+)_", name)
+    if m:
+        return int(m.group(1))
+    return int(inv.get("发票序号", 0)) + 1
+
+
+def collect_images(images: list[Path], images_dir: Path | None, pattern: str, root: Path) -> list[Path]:
+    collected = [path for path in images if path.exists()]
+    if collected:
+        return sorted(collected)
+    if images_dir is None:
+        raise RuntimeError("no images provided")
+    images_dir = resolve_path(root, images_dir)
+    if not images_dir.exists():
+        raise RuntimeError(f"images_dir does not exist: {images_dir}")
+    return sorted(path for path in images_dir.rglob(pattern) if path.is_file())
+
+
+def auto_collect_groups(errors_path: Path, results_path: Path, records_dir: Path, root: Path) -> list[dict]:
+    """Read invoice_errors.json and auto-collect payment record images per group."""
+    root = root.resolve()
+
+    errors = json.loads(errors_path.read_text(encoding="utf-8"))
+    results = json.loads(results_path.read_text(encoding="utf-8"))
+    invoices_by_source = {inv["文件名"]: inv for inv in results.get("发票信息", [])}
+
+    groups: list[dict] = []
+    mat_dir = records_dir / "1_材料费"
+
+    for entry in errors.get("连号发票", []) or []:
+        reason = entry.get("问题原因", "")
+        if "需要额外添加支付说明与支付记录" not in reason:
+            continue
+
+        items = entry.get("所有重复发票", [])
+        inv_objs = [invoices_by_source[item["文件名"]] for item in items if item["文件名"] in invoices_by_source]
+        if not inv_objs:
+            continue
+
+        indexes = []
+        images: list[Path] = []
+        for inv in inv_objs:
+            idx = display_index(inv)
+            indexes.append(idx)
+            candidates = sorted(mat_dir.glob(f"{idx}_支付记录.*"))
+            if candidates:
+                images.extend(candidates)
+
+        if not images:
+            continue
+
+        min_idx, max_idx = min(indexes), max(indexes)
+        title = f"xxx {min_idx}-{max_idx} 支付记录"
+        out_name = f"xxx_{min_idx}-{max_idx}_支付记录.docx"
+        output = root / "支付记录" / out_name
+
+        groups.append({"title": title, "images": images, "output": output})
+
+    return groups
+
+
+def auto_collect_groups_from_record(errors_path: Path, results_path: Path, match_record: Path, root: Path) -> list[dict]:
+    """Read invoice_errors.json and collect payment images from 匹配记录.json."""
+    root = root.resolve()
+    errors = json.loads(errors_path.read_text(encoding="utf-8"))
+    results = json.loads(results_path.read_text(encoding="utf-8"))
+    record = load_match_record(match_record)
+    mapping = record.get("发票映射", {})
+    invoices_by_source = {inv["文件名"]: inv for inv in results.get("发票信息", [])}
+
+    groups: list[dict] = []
+    for entry in errors.get("连号发票", []) or []:
+        reason = entry.get("问题原因", "")
+        if "需要额外添加支付说明与支付记录" not in reason:
+            continue
+        items = entry.get("所有重复发票", [])
+        inv_objs = [invoices_by_source[item["文件名"]] for item in items if item["文件名"] in invoices_by_source]
+        if not inv_objs:
+            continue
+
+        indexes: list[int] = []
+        images: list[Path] = []
+        for inv in inv_objs:
+            indexes.append(display_index(inv))
+            rec_entry = mapping.get(invoice_key(str(inv.get("文件名") or "")), {})
+            images.extend(image_paths(root, list(rec_entry.get("支付记录", []) or [])))
+
+        if not images:
+            continue
+        min_idx, max_idx = min(indexes), max(indexes)
+        groups.append({
+            "title": f"xxx {min_idx}-{max_idx} 支付记录",
+            "images": sorted(images),
+            "output": root / "支付记录" / f"xxx_{min_idx}-{max_idx}_支付记录.docx",
+        })
+    return groups
+
+
+def set_font(run, size: int, bold: bool = False) -> None:
+    run.bold = bold
+    run.font.size = Pt(size)
+    run.font.name = "宋体"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "宋体")
+
+
+def generate_one(title: str, images: list[Path], output: Path) -> None:
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Cm(0.5)
+    section.bottom_margin = Cm(0.5)
+    section.left_margin = Cm(0.5)
+    section.right_margin = Cm(0.5)
+
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_font(p.add_run(title), size=24, bold=True)
+
+    p2 = doc.add_paragraph()
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for image in images:
+        run = p2.add_run()
+        run.add_picture(str(image), width=Cm(DEFAULT_WIDTH_CM))
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(output)
+    print(f"wrote={output} images={len(images)}")
+
+
+def generate(args: argparse.Namespace) -> None:
+    root = args.root.resolve()
+
+    # Manual mode: --images provided
+    if args.images:
+        images = collect_images(args.images, args.images_dir, args.pattern, root)
+        if not images:
+            raise RuntimeError("no images matched")
+        output = resolve_path(root, args.output)
+        generate_one(args.title, images, output)
+        return
+
+    # Auto mode: discover groups from invoice_errors.json
+    errors_path = resolve_path(root, args.errors)
+    results_path = resolve_path(root, args.results)
+    records_dir = resolve_path(root, args.records_dir)
+    match_record = resolve_path(root, args.match_record)
+
+    if not errors_path.exists():
+        raise RuntimeError(f"errors file not found: {errors_path}")
+
+    if match_record.exists():
+        groups = auto_collect_groups_from_record(errors_path, results_path, match_record, root)
+    else:
+        groups = auto_collect_groups(errors_path, results_path, records_dir, root)
+    if not groups:
+        print("no payment-record groups found in invoice_errors.json")
+        return
+
+    for group in groups:
+        generate_one(group["title"], group["images"], group["output"])
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_root_arg(parser)
+    parser.add_argument("--title", default=DEFAULT_TITLE)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--width-cm", type=float, default=DEFAULT_WIDTH_CM)
+    parser.add_argument("--images", type=Path, nargs="*", default=[])
+    parser.add_argument("--images-dir", type=Path, default=None)
+    parser.add_argument("--pattern", default="*_支付记录*.jpg")
+    parser.add_argument("--errors", type=Path, default=DEFAULT_ERRORS, help="invoice_errors.json path (auto mode)")
+    parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS, help="invoice_results_sorted.json path")
+    parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
+    parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR, help="deprecated fallback if 匹配记录.json is absent")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    generate(parse_args())

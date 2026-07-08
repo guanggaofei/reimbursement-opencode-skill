@@ -1,0 +1,35 @@
+# Local environments and caches
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# User input and private reimbursement data
+invoices/
+images/
+example_images/
+output/
+支付记录/
+支付说明/
+
+# Generated workflow state and outputs
+OCR缓存.json
+匹配记录.json
+invoice_results.json
+invoice_results_sorted.json
+invoice_errors.json
+invoice_fixes.json
+行程单数据.json
+支出记录OCR整理结果.md
+支出记录OCR匹配明细.md
+支出记录购买日期.json
+支出记录DOCX生成结果.md
+支付说明生成结果.md
+Hello World 2026报账单填写结果.xlsx
+Hello World 2026支出记录填写结果.docx
+第*批报账单.xlsx
+
+# Nested development git repositories used during local editing
+.opencode/skills/reimbursement/.git/
+.opencode/agents/.git/
+.opencode/skills/reimbursement/scripts/__pycache__/
