@@ -214,16 +214,25 @@ python .opencode/skills/reimbursement/scripts/extract_trip_sheets.py --root .
 rm -f 支出记录OCR整理结果.md 支出记录OCR匹配明细.md OCR缓存.json
 ```
 
-然后让用户运行 OCR：
+然后让用户手动运行 OCR。给用户的提示必须包含以下操作步骤：
+
+1. 打开当前项目文件夹，也就是能看到 `invoices/`、`images/`、`README.md` 的文件夹。
+2. 在文件夹空白处右键。
+3. 选择“在终端中打开”或类似选项。
+4. 复制下面命令，粘贴到终端，按回车运行。
 
 ```bash
-python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
+source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
 ```
+
+提醒用户：OCR 可能需要较长时间，运行期间不要关闭终端。运行完成后把终端输出告诉 Agent。
 
 **增量添加图片：** OCR 首次运行完成且手动修复结束后，若需添加少量新截图到 `images/`：
 
+给用户的提示同样必须要求他们在当前项目文件夹空白处右键打开终端，然后复制下面命令运行：
+
 ```bash
-python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
+source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
 ```
 
 `--scan-only` 模式：
@@ -489,10 +498,10 @@ python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --ro
 
 针对每类缺失，向用户说明还需要提供什么（如"序号X 发票缺少支付记录截图，金额 XXX 元"），而不是列出 `未匹配截图[]` 的详细图片文件名。只有用户明确询问时，才展示详细图片列表。
 
-提醒用户如果需要补充截图，可以放入 `images/` 并通过 `--scan-only` 增量处理：
+提醒用户如果需要补充截图，可以放入 `images/` 并通过 `--scan-only` 增量处理。给用户的提示必须说明：打开当前项目文件夹，在空白处右键选择“在终端中打开”，再复制下面命令运行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
+source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
 ```
 
 ##### 8.8.1. 冲突截图处理

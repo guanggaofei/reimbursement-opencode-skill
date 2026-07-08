@@ -154,6 +154,27 @@ invoice/
 
 如果脚本无法确认截图归属，会把图片留在 `匹配记录.json` 的 `未匹配截图[]` 中，并在报告里说明原因。
 
+## 运行 OCR
+
+OCR 会读取 `images/` 里的截图并生成 `OCR缓存.json` 和 `匹配记录.json`。运行前确认：
+
+- 发票和行程单已经放入 `invoices/`。
+- 支付记录和账单截图已经放入 `images/`。
+- 当前打开的是项目根目录，也就是能看到 `invoices/`、`images/`、`README.md` 的那个文件夹。
+
+运行方法：
+
+1. 打开项目根目录。
+2. 在文件夹空白处右键。
+3. 选择“在终端中打开”或类似选项。
+4. 复制下面这条命令，粘贴到终端里，然后按回车：
+
+```bash
+source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
+```
+
+OCR 可能需要较长时间。运行期间不要关闭终端。
+
 ## 增量添加截图
 
 如果首次 OCR 后又补充了少量截图：
@@ -161,7 +182,16 @@ invoice/
 1. 把新截图放入 `images/`。
 2. 不要删除 `OCR缓存.json`。
 3. 不要删除 `匹配记录.json`。
-4. 告知Agent你新增了截图。
+4. 打开项目根目录。
+5. 在文件夹空白处右键。
+6. 选择“在终端中打开”或类似选项。
+7. 复制下面这条命令，粘贴到终端里，然后按回车：
+
+```bash
+source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
+```
+
+运行完成后，告知 Agent 你已经新增并扫描了截图。
 
 ## 强制重新 OCR
 
