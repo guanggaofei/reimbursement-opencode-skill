@@ -28,7 +28,6 @@ DEFAULT_TITLE = "xxx 17-24 支付记录"
 DEFAULT_WIDTH_CM = 4.0
 DEFAULT_ERRORS = Path("invoice_errors.json")
 DEFAULT_RESULTS = Path("invoice_results_sorted.json")
-DEFAULT_RECORDS_DIR = Path("支出记录整理")
 
 
 def display_index(inv: dict) -> int:
@@ -49,49 +48,6 @@ def collect_images(images: list[Path], images_dir: Path | None, pattern: str, ro
     if not images_dir.exists():
         raise RuntimeError(f"images_dir does not exist: {images_dir}")
     return sorted(path for path in images_dir.rglob(pattern) if path.is_file())
-
-
-def auto_collect_groups(errors_path: Path, results_path: Path, records_dir: Path, root: Path) -> list[dict]:
-    """Read invoice_errors.json and auto-collect payment record images per group."""
-    root = root.resolve()
-
-    errors = json.loads(errors_path.read_text(encoding="utf-8"))
-    results = json.loads(results_path.read_text(encoding="utf-8"))
-    invoices_by_source = {inv["文件名"]: inv for inv in results.get("发票信息", [])}
-
-    groups: list[dict] = []
-    mat_dir = records_dir / "1_材料费"
-
-    for entry in errors.get("连号发票", []) or []:
-        reason = entry.get("问题原因", "")
-        if "需要额外添加支付说明与支付记录" not in reason:
-            continue
-
-        items = entry.get("所有重复发票", [])
-        inv_objs = [invoices_by_source[item["文件名"]] for item in items if item["文件名"] in invoices_by_source]
-        if not inv_objs:
-            continue
-
-        indexes = []
-        images: list[Path] = []
-        for inv in inv_objs:
-            idx = display_index(inv)
-            indexes.append(idx)
-            candidates = sorted(mat_dir.glob(f"{idx}_支付记录.*"))
-            if candidates:
-                images.extend(candidates)
-
-        if not images:
-            continue
-
-        min_idx, max_idx = min(indexes), max(indexes)
-        title = f"xxx {min_idx}-{max_idx} 支付记录"
-        out_name = f"xxx_{min_idx}-{max_idx}_支付记录.docx"
-        output = root / "支付记录" / out_name
-
-        groups.append({"title": title, "images": images, "output": output})
-
-    return groups
 
 
 def auto_collect_groups_from_record(errors_path: Path, results_path: Path, match_record: Path, root: Path) -> list[dict]:
@@ -176,16 +132,14 @@ def generate(args: argparse.Namespace) -> None:
     # Auto mode: discover groups from invoice_errors.json
     errors_path = resolve_path(root, args.errors)
     results_path = resolve_path(root, args.results)
-    records_dir = resolve_path(root, args.records_dir)
     match_record = resolve_path(root, args.match_record)
 
     if not errors_path.exists():
         raise RuntimeError(f"errors file not found: {errors_path}")
 
-    if match_record.exists():
-        groups = auto_collect_groups_from_record(errors_path, results_path, match_record, root)
-    else:
-        groups = auto_collect_groups(errors_path, results_path, records_dir, root)
+    if not match_record.exists():
+        raise RuntimeError(f"match record not found: {match_record}")
+    groups = auto_collect_groups_from_record(errors_path, results_path, match_record, root)
     if not groups:
         print("no payment-record groups found in invoice_errors.json")
         return
@@ -206,7 +160,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--errors", type=Path, default=DEFAULT_ERRORS, help="invoice_errors.json path (auto mode)")
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS, help="invoice_results_sorted.json path")
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
-    parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR, help="deprecated fallback if 匹配记录.json is absent")
     return parser.parse_args()
 
 

@@ -169,7 +169,6 @@ def main() -> int:
     parser.add_argument("--trip-json", type=Path, default=Path("行程单数据.json"))
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
     parser.add_argument("--ocr-cache", type=Path, default=Path("OCR缓存.json"))
-    parser.add_argument("--records-root", type=Path, default=Path("支出记录整理"), help="deprecated; ignored")
     parser.add_argument("--update-report", type=Path, nargs="?", const=Path("支出记录OCR整理结果.md"), help="写入 Markdown 报告文件")
     args = parser.parse_args()
 
