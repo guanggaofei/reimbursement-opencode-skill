@@ -21,22 +21,22 @@
 
 ### 2. 复制 skill
 
-```bash
-mkdir -p .opencode/skills/reimbursement
-cp -r skills/reimbursement/* .opencode/skills/reimbursement/
+```powershell
+New-Item -ItemType Directory -Force .opencode\skills\reimbursement | Out-Null
+Copy-Item -Recurse -Force skills\reimbursement\* .opencode\skills\reimbursement\
 ```
 
 ### 3. 复制 subagent
 
-```bash
-mkdir -p .opencode/agents
-cp agents/fix-*.md .opencode/agents/
+```powershell
+New-Item -ItemType Directory -Force .opencode\agents | Out-Null
+Copy-Item -Force agents\fix-*.md .opencode\agents\
 ```
 
 ### 4. 创建输入目录
 
-```bash
-mkdir -p invoices images
+```powershell
+New-Item -ItemType Directory -Force invoices, images | Out-Null
 ```
 
 ### 5. 告知用户
@@ -205,11 +205,11 @@ OCR 会读取 `images/` 里的截图并生成 `OCR缓存.json` 和 `匹配记录
 
 1. 打开项目根目录。
 2. 在文件夹空白处右键。
-3. 选择“在终端中打开”或类似选项。
-4. 复制下面这条命令，粘贴到终端里，然后按回车：
+3. 选择“在终端中打开”或“在 PowerShell 中打开”。
+4. 复制下面这条命令，粘贴到 PowerShell 里，然后按回车：
 
-```bash
-source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\organize_expense_records.py --root .
 ```
 
 OCR 可能需要较长时间。运行期间不要关闭终端。
@@ -223,11 +223,11 @@ OCR 可能需要较长时间。运行期间不要关闭终端。
 3. 不要删除 `匹配记录.json`。
 4. 打开项目根目录。
 5. 在文件夹空白处右键。
-6. 选择“在终端中打开”或类似选项。
-7. 复制下面这条命令，粘贴到终端里，然后按回车：
+6. 选择“在终端中打开”或“在 PowerShell 中打开”。
+7. 复制下面这条命令，粘贴到 PowerShell 里，然后按回车：
 
-```bash
-source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\organize_expense_records.py --root . --scan-only
 ```
 
 运行完成后，告知 Agent 你已经新增并扫描了截图。
@@ -270,13 +270,13 @@ source .venv/bin/activate && python .opencode/skills/reimbursement/scripts/organ
 
 先运行：
 
-```bash
-python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --root . --update-report
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\verify_screenshot_coverage.py --root . --update-report
 ```
 
 再查看：
 
-```bash
+```text
 支出记录OCR整理结果.md
 支出记录OCR匹配明细.md
 ```
@@ -285,8 +285,8 @@ python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --ro
 
 通常不需要。把新截图放入 `images/` 后运行：
 
-```bash
-python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root . --scan-only
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\organize_expense_records.py --root . --scan-only
 ```
 
 ### 可以手动编辑匹配记录吗？

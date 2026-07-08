@@ -26,7 +26,7 @@ permission:
 
 如果是打车发票，需同时看发票 PDF 和对应的行程单 PDF 来提取正确的单价。
 
-```bash
+```powershell
 pdftotext -layout invoices/<文件名.pdf> -
 pdftotext -layout invoices/<对应行程单文件名.pdf> -
 ```
