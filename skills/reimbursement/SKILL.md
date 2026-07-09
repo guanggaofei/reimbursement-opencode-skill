@@ -389,6 +389,24 @@ python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --ro
 脚本返回退出码 0 表示所有发票和行程都有完整的 `支付记录` + `账单截图`。
 返回 1 表示仍有缺失项，向用户展示缺失列表并等待修复。
 
+#### 8.10. 复制未匹配截图到待审核目录
+
+所有 subagent 分析完成后，复制 `匹配记录.json` 的 `未匹配截图[]` 中引用的原图片到 `待审核截图/`，方便人工集中审核。只复制，不移动，`images/` 原文件不受影响；文件名保持不变，方便对照 `支出记录OCR匹配明细.md` 中的原因。
+
+```bash
+mkdir -p 待审核截图
+python -c "
+import json, shutil
+with open('匹配记录.json', encoding='utf-8') as f:
+    data = json.load(f)
+for item in data.get('未匹配截图', []):
+    img = item['图片']
+    dst = '待审核截图/' + img.split('/')[-1]
+    shutil.copy2(img, dst)
+    print(f'{img} -> {dst}')
+"
+```
+
 ### 9. 生成费用记录 DOCX
 
 ```bash
