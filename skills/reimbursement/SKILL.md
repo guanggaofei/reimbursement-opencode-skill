@@ -55,6 +55,7 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 | `scripts/generate_reimbursement_xlsx.py` | XML 级别的报销 xlsx 填充器。 |
 | `scripts/generate_payment_explanations.py` | XML 级别的支付说明 DOCX 生成器。 |
 | `scripts/extract_trip_sheets.py` | 从行程单 PDF 中提取行程数据到 JSON。 |
+| `scripts/check_invoice_errors.py` | 遍历 `invoice_results.json`，检测 `ERROR`、`需人工校验` 和空 `开票时间`，输出 `invoice_errors_raw.json`。 |
 | `scripts/apply_invoice_fixes.py` | 将 `invoice_fixes.json` 中的修复批量写入 `invoice_results.json`（步骤 5）。 |
 | `scripts/apply_match_actions.py` | 将 subagent 生成的截图匹配 action JSON 合入 `匹配记录.json`，并强制截图唯一性规则。 |
 | `scripts/verify_screenshot_coverage.py` | 验证截图覆盖率，读取 `匹配记录.json` 与 `invoice_results_sorted.json` + `行程单数据.json` 交叉比对，输出缺失报告（步骤 8）。 |
@@ -63,7 +64,7 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 | subagent | 用途 |
 |----------|------|
-| `fix-invoice-errors.md` | 修复发票 ERROR / 需人工校验字段（步骤 5）。模板中的 `{错误位置信息由主流程在此处填充}` 由主流程替换为实际错误列表后传入 subagent。 |
+| `fix-invoice-errors.md` | 修复 `invoice_errors_raw.json` 中列出的发票 ERROR / 需人工校验 / 空开票时间字段（步骤 5）。 |
 | `fix-shop-name-ambiguity.md` | 金额对应多个候选发票时，通过店铺名称消除歧义（类型 A） |
 | `fix-trip-ambiguity.md` | 金额对应多个候选行程时，通过服务商+时间消除歧义（类型 B） |
 | `fix-duplicate-screenshots.md` | 多张截图匹配同一发票时，检查是否为重复截图（类型 C） |
@@ -143,19 +144,39 @@ if [ -f invoice_fixes.json ]; then
 fi
 ```
 
-然后检查退出码（非零）或输出是否包含 `ERROR`。若存在错误，进入步骤 5；若无错误，跳过步骤 5。
+#### 4.5. 自动检测发票错误
+
+`super_invoice.py` 运行后，无论 stdout 是否出现 `ERROR`，都必须运行结构化错误检测：
+
+```bash
+python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
+```
+
+该脚本写入 `invoice_errors_raw.json`。退出码 0 表示无错误；退出码 1 表示检测到需要修复的字段；退出码 2 表示检测脚本自身失败。若退出码 2，立即停止并报告用户。若 `invoice_errors_raw.json` 中 `error_count > 0`，进入步骤 5；否则跳过步骤 5。
 
 ### 5. 修复 ERROR / 需人工校验
 
-super_invoice 输出包含 `ERROR` 时，使用 subagent `@fix-invoice-errors` 修复：
+当 `invoice_errors_raw.json` 中 `error_count > 0` 时，使用 subagent `@fix-invoice-errors` 修复。主流程不要手工 grep 或重组错误列表；subagent 必须直接读取 `invoice_errors_raw.json`，只修复其中 `errors[]` 列出的字段，并将修复写入 `invoice_fixes.json`。
 
-1. **主流程定位错误位置** — 遍历 `invoice_results.json` 中 `发票信息[]` 的所有条目，收集所有 `ERROR` / `需人工校验` 字段，整理为结构化错误描述（含文件名、字段路径、当前值）。
-2. **构造提示词** — 读取 `.opencode/agents/fix-invoice-errors.md`，将其中的 `{错误位置信息由主流程在此处填充}` 替换为步骤 1 整理出的错误列表，传入 subagent。subagent 只修正这些指定位置的字段，从 PDF 提取正确值，**直接写入** `invoice_fixes.json`。
-3. 主流程运行 `apply_invoice_fixes.py` 写入修复：
+修复循环最多执行 3 轮：
+
+1. 记录当前 `invoice_errors_raw.json.error_count`。
+2. 调用 `@fix-invoice-errors`。
+3. 若 subagent 报告无法处理的错误，立即停止并报告用户。
+4. 主流程运行 `apply_invoice_fixes.py` 写入修复：
    ```bash
    python .opencode/skills/reimbursement/scripts/apply_invoice_fixes.py --root .
    ```
-   脚本执行类型校验（金额非负、税号长度≥15等），写入修复并保留 `invoice_fixes.json` 作为审计记录。
+   脚本执行类型校验（金额非负、税号长度≥15等），写入修复并保留 `invoice_fixes.json` 作为审计记录。若脚本失败，立即停止并报告用户。
+5. 再次运行错误检测：
+   ```bash
+   python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
+   ```
+6. 若新的 `error_count == 0`，步骤 5 完成。
+7. 若新的 `error_count > 0` 但没有下降，立即停止并报告用户，不要无限重试。
+8. 若新的 `error_count > 0` 且有下降，继续下一轮修复。
+
+超过 3 轮仍有错误时，停止并向用户展示 `invoice_errors_raw.json` 中剩余错误。
 
 ### 6. 跨批去重
 
@@ -177,7 +198,7 @@ python .opencode/skills/reimbursement/scripts/super_invoice.py --root .
 
 这将生成 `invoice_results_sorted.json`、`output/` 和 `invoice_errors.json`。`invoice_results_sorted.json` 和 `invoice_errors.json` 是只读的 — 不要修改。
 
-继续前确认 `invoice_results.json` 和 `invoice_results_sorted.json` 都没有 `ERROR` 或 `需人工校验`。
+继续前再次运行 `check_invoice_errors.py --root .`，确认 `invoice_results.json` 没有 `ERROR`、`需人工校验` 或空 `开票时间`。
 
 #### 7.5. 提取行程数据
 
@@ -441,7 +462,7 @@ python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --r
 ### 12. 验证
 
 预期成功状态：
-- `invoice_results.json` 和 `invoice_results_sorted.json` 没有 `ERROR` 或 `需人工校验`。
+- `check_invoice_errors.py --root .` 返回无错误，且 `invoice_results_sorted.json` 没有 `ERROR` 或 `需人工校验`。
 - `output/` 包含分类后的发票和出租车行程单。
 - `匹配记录.json` 包含 OCR 自动匹配和人工匹配后的截图关系，所有截图路径指向 `images/` 原文件。
 - `Hello World 2026报账单填写结果.xlsx` 和 `Hello World 2026支出记录填写结果.docx` 存在且通过 zipfile 验证。
