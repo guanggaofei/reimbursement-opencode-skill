@@ -14,7 +14,7 @@ permission:
 
 ## 数据来源
 
-- `invoice_results_sorted.json` — 获取发票的 `文件名` 字段。只使用 `invoices/<文件名字段值>` 定位；`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
+- `invoice_results_sorted.json` — 发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
 - `行程单数据.json` — 行程明细（序号、服务商、车型、上车时间、起点终点、金额）。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 OCR 原文、`kind`、`taxi_platform`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中，匹配成功后通过 action 合入对应发票的 `行程明细[]`。
@@ -71,7 +71,7 @@ permission:
 - `slot` 从 OCR 缓存的 `kind` 字段读取。
 - `purchase_date` 从支付记录 OCR 的 `payment_date` 读取；没有就省略。
 - 如果需要替换已有图片，添加 `replace` 和 `ignore_replaced: true`。
-- 所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>`、`images/<原截图文件名>`。
+- 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 - 不要在 action 中写入金额、打车平台、服务商、车型、上车时间、更新后文件名或发票序号等可从其它文件重算的字段。
 
 写完 action 文件后运行：

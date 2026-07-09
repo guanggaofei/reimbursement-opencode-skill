@@ -18,7 +18,7 @@ permission:
 
 ## 数据来源
 
-- `invoice_results_sorted.json` — 获取发票的 `文件名`、`销售方名称`、`价税合计金额`、`项目列表`。不要用 `更新后文件名` 或序号定位。
+- `invoice_results_sorted.json` — 发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。另读取 `销售方名称`、`价税合计金额`、`项目列表` 用于归属判断。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，提取 `ocr_text`、`kind`、`amounts`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；只搜索 `未匹配截图[]` 中的图片。
 - `fix-bearing-invoice.actions.json` — 本 subagent 输出的操作文件。
@@ -79,7 +79,7 @@ permission:
 }
 ```
 
-- `发票映射` key 必须是稳定发票路径 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`。
+- 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 - `slot` 使用 `OCR缓存.json` 的 `kind` 字段决定，只能是 `支付记录` 或 `账单截图`。
 - `purchase_date` 从匹配的支付记录 `payment_date` 取最早日期；没有就省略。
 - 若同一发票同类型需要多张截图，必须设置顶层 `allow_multiple_same_slot: true`，并在每条相关 action 中写明 `exception_reason`。

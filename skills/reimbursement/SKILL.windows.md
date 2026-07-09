@@ -257,7 +257,7 @@ Remove-Item -Force 支出记录OCR整理结果.md, 支出记录OCR匹配明细.m
    - 类型 D: `未匹配到截图的发票` — 完全无截图的发票，通过搜索 OCR 关键词寻找缺失截图。
 5. 询问用户先修复哪种类型。一次只修复一种类型。对每种类型，必须使用对应的 subagent（`@fix-shop-name-ambiguity` / `@fix-trip-ambiguity` / `@fix-duplicate-screenshots` / `@fix-bearing-invoice`）。提示词已经在 `.opencode/agents/` 文件夹中写好，你必须按照该文件夹中的文件来输出提示词。
 
-**重要（匹配记录机制）：** subagent 直接维护 `匹配记录.json`。它只保存基于 `invoice_results_sorted.json` 的 `文件名` 字段构造的发票路径、原图片名和归属关系；金额、类型、平台、服务商、车型、当前排序名等都从 `invoice_results_sorted.json`、`OCR缓存.json`、`行程单数据.json` 或行程单 PDF 读取，不写入 `匹配记录.json`。每次确认匹配后，写入 `发票映射`，并从 `未匹配截图[]` 删除对应图片；重复或废弃图片写入 `忽略截图[]`。所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>` 和 `images/<原截图文件名>`。示例：
+**重要（匹配记录机制）：** subagent 直接维护 `匹配记录.json`。它只保存基于 `invoice_results_sorted.json` 的 `文件名` 字段构造的发票路径、原图片名和归属关系；金额、类型、平台、服务商、车型、当前排序名等都从 `invoice_results_sorted.json`、`OCR缓存.json`、`行程单数据.json` 或行程单 PDF 读取，不写入 `匹配记录.json`。每次确认匹配后，写入 `发票映射`，并从 `未匹配截图[]` 删除对应图片；重复或废弃图片写入 `忽略截图[]`。所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。示例：
 ```json
 {
   "发票映射": {

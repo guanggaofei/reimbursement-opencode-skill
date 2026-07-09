@@ -67,7 +67,7 @@ permission:
 - `slot` 从 OCR 缓存的 `kind` 字段读取，只能是 `支付记录` 或 `账单截图`。
 - `purchase_date` 从支付记录 OCR 的 `payment_date` 读取；没有就省略。
 - 如果需要替换已有图片，添加 `replace` 和 `ignore_replaced: true`。
-- 所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>`、`images/<原截图文件名>`。
+- 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 - 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
 
 写完 action 文件后运行：

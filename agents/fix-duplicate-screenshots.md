@@ -81,7 +81,7 @@ permission:
 }
 ```
 
-所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>`、`images/<原截图文件名>`。
+- 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 
 不要在 action 中写入金额、类型、打车平台、服务商、车型、更新后文件名或发票序号等可从其它文件重算的字段。
 
