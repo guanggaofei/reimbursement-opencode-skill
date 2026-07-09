@@ -16,8 +16,9 @@ permission:
 
 - `invoice_results_sorted.json` — 候选发票信息。只使用原始发票名 `invoices/<文件名>` 定位；`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 `ocr_text`、`kind`、`amounts`、`payment_date`。
-- `匹配记录.json` — 唯一匹配状态文件。只保存原发票名、原图片名和归属关系；待处理图片在 `未匹配截图[]` 中。
+- `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中。
 - `支出记录OCR匹配明细.md` — 仅作为人工阅读报告，不作为状态来源。
+- `fix-shop-name-ambiguity.actions.json` — 本 subagent 输出的操作文件。
 
 ## 方法
 
@@ -29,31 +30,53 @@ permission:
    - 账单截图通常包含完整店铺名称，如 `鸿康明五金旗舰店`。
    - 发票销售方名称来自 `销售方名称` 字段。
    - 去除地级市、有限公司等噪声后，看核心词重叠。
-5. 能确认归属的图片立即写入 `匹配记录.json`；无法确认的保留在 `未匹配截图[]` 并说明原因。
+5. 能确认归属的图片写入 `fix-shop-name-ambiguity.actions.json`；无法确认的保留在 `未匹配截图[]` 并说明原因。
+
+## 截图唯一性规则
+
+除 `fix-bearing-invoice` 和主流程人工确认外，同一材料费发票最多只能有一张 `支付记录` 和一张 `账单截图`。本 subagent 必须遵守：
+
+- 不允许把两张同类型截图同时写入同一发票。
+- 如果新截图与目标发票已有同类型截图竞争同一位置，必须二选一。
+- 如果新截图更完整或更清晰，action 中使用 `replace` 指定被替换图片，并设置 `ignore_replaced: true`。
+- 如果已有截图更合适，不生成分配 action；可生成 `ignore_image` action 忽略当前重复图。
+- 如果无法判断哪张更合适，不写入 action，保留在 `未匹配截图[]` 并报告给主流程。
 
 ## 写入规则
 
-只维护 `匹配记录.json`，不移动、不复制、不删除任何图片。
+不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-匹配成功时：
+匹配成功时，写入 `fix-shop-name-ambiguity.actions.json`：
 
 ```json
 {
-  "发票映射": {
-    "invoices/发票原文件名.pdf": {
-      "支付记录": ["images/IMG_2707.PNG"],
-      "账单截图": ["images/IMG_2708.PNG"],
-      "购买日期": "2026/7/7"
+  "agent": "fix-shop-name-ambiguity",
+  "actions": [
+    {
+      "type": "assign_invoice_image",
+      "invoice": "invoices/发票原文件名.pdf",
+      "slot": "支付记录",
+      "image": "images/IMG_2707.PNG",
+      "purchase_date": "2026/7/7",
+      "reason": "OCR 店铺核心词匹配发票销售方"
     }
-  }
+  ]
 }
 ```
 
-- `类型` 从 OCR 缓存的 `kind` 字段读取，只能是 `支付记录` 或 `账单截图`。
-- `购买日期` 从支付记录 OCR 的 `payment_date` 读取；没有就留空。
-- 写入后，从 `未匹配截图[]` 删除该图片。
+- `slot` 从 OCR 缓存的 `kind` 字段读取，只能是 `支付记录` 或 `账单截图`。
+- `purchase_date` 从支付记录 OCR 的 `payment_date` 读取；没有就省略。
+- 如果需要替换已有图片，添加 `replace` 和 `ignore_replaced: true`。
 - 所有路径必须使用原始路径：`invoices/<原发票文件名>`、`images/<原截图文件名>`。
-- 不要向 `匹配记录.json` 写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
+- 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
+
+写完 action 文件后运行：
+
+```bash
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-shop-name-ambiguity.actions.json
+```
+
+如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
 
 ## 输出
 

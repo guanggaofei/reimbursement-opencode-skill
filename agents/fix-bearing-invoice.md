@@ -20,7 +20,8 @@ permission:
 
 - `invoice_results_sorted.json` — 获取发票的原始 `文件名`、`销售方名称`、`价税合计金额`、`项目列表`。不要用 `更新后文件名` 或序号定位。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，提取 `ocr_text`、`kind`、`amounts`、`payment_date`。
-- `匹配记录.json` — 唯一匹配状态文件。只保存原发票名、原图片名和归属关系；只搜索 `未匹配截图[]` 中的图片。
+- `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；只搜索 `未匹配截图[]` 中的图片。
+- `fix-bearing-invoice.actions.json` — 本 subagent 输出的操作文件。
 
 ## 方法
 
@@ -56,27 +57,41 @@ permission:
 
 ## 写入规则
 
-只维护 `匹配记录.json`，不移动、不复制、不删除任何图片。
+不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-匹配成功时：
+匹配成功时，写入 `fix-bearing-invoice.actions.json`：
 
 ```json
 {
-  "发票映射": {
-    "invoices/发票原文件名.pdf": {
-      "支付记录": ["images/IMG_2680.PNG"],
-      "账单截图": ["images/IMG_2681.PNG"],
-      "购买日期": "2026/7/7"
+  "agent": "fix-bearing-invoice",
+  "allow_multiple_same_slot": true,
+  "actions": [
+    {
+      "type": "assign_invoice_image",
+      "invoice": "invoices/发票原文件名.pdf",
+      "slot": "支付记录",
+      "image": "images/IMG_2680.PNG",
+      "purchase_date": "2026/7/7",
+      "exception_reason": "该发票由多笔支付组成，需要多张支付记录共同证明",
+      "reason": "OCR 商品关键词和金额组合匹配"
     }
-  }
+  ]
 }
 ```
 
 - `发票映射` key 必须是原始发票路径 `invoices/<invoice_results_sorted.json 中的 文件名>`。
-- `支付记录` / `账单截图` 使用 `OCR缓存.json` 的 `kind` 字段决定。
-- `购买日期` 从匹配的支付记录 `payment_date` 取最早日期。
-- 写入后，从 `未匹配截图[]` 删除已匹配图片。
-- 不要向 `匹配记录.json` 写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
+- `slot` 使用 `OCR缓存.json` 的 `kind` 字段决定，只能是 `支付记录` 或 `账单截图`。
+- `purchase_date` 从匹配的支付记录 `payment_date` 取最早日期；没有就省略。
+- 若同一发票同类型需要多张截图，必须设置顶层 `allow_multiple_same_slot: true`，并在每条相关 action 中写明 `exception_reason`。
+- 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
+
+写完 action 文件后运行：
+
+```bash
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-bearing-invoice.actions.json
+```
+
+如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
 
 ## 最终报告
 

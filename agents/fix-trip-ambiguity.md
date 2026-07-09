@@ -17,8 +17,9 @@ permission:
 - `invoice_results_sorted.json` — 获取发票原文件名。只使用原始发票名 `invoices/<文件名>` 定位；`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
 - `行程单数据.json` — 行程明细（序号、服务商、车型、上车时间、起点终点、金额）。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 OCR 原文、`kind`、`taxi_platform`、`payment_date`。
-- `匹配记录.json` — 唯一匹配状态文件。只保存原发票名、原图片名和归属关系；待处理图片在 `未匹配截图[]` 中，匹配成功后写入对应发票的 `行程明细[]`。
+- `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中，匹配成功后通过 action 合入对应发票的 `行程明细[]`。
 - `支出记录OCR匹配明细.md` — 仅作为人工阅读报告。
+- `fix-trip-ambiguity.actions.json` — 本 subagent 输出的操作文件。
 
 ## 方法
 
@@ -32,36 +33,54 @@ permission:
    - 账单截图服务商 ≈ 行程单服务商，是主要依据。
    - 支付记录乘车时间 ≈ 行程单上车时间，通常 15 分钟内。
    - 路线信息仅作兜底。
-5. 能确认归属的图片立即写入 `匹配记录.json`；无法确认的保留未匹配并说明原因。
+5. 能确认归属的图片写入 `fix-trip-ambiguity.actions.json`；无法确认的保留未匹配并说明原因。
+
+## 截图唯一性规则
+
+除 `fix-bearing-invoice` 和主流程人工确认外，同一打车行程最多只能有一张 `支付记录` 和一张 `账单截图`。本 subagent 必须遵守：
+
+- 不允许把两张同类型截图同时写入同一发票的同一 `行程序号`。
+- 如果新截图与目标行程已有同类型截图竞争同一位置，必须二选一。
+- 如果新截图更完整或更清晰，action 中使用 `replace` 指定被替换图片，并设置 `ignore_replaced: true`。
+- 如果已有截图更合适，不生成分配 action；可生成 `ignore_image` action 忽略当前重复图。
+- 如果无法判断哪张更合适，不写入 action，保留在 `未匹配截图[]` 并报告给主流程。
 
 ## 写入规则
 
-只维护 `匹配记录.json`，不移动、不复制、不删除任何图片。
+不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-打车行程匹配成功时，写入对应发票的 `行程明细[]`：
+打车行程匹配成功时，写入 `fix-trip-ambiguity.actions.json`：
 
 ```json
 {
-  "发票映射": {
-    "invoices/打车发票原文件名.pdf": {
-      "行程明细": [
-        {
-          "行程序号": 1,
-          "金额": "19.30",
-          "支付记录": ["images/IMG_2615.PNG"],
-          "账单截图": ["images/IMG_2616.PNG"]
-        }
-      ]
+  "agent": "fix-trip-ambiguity",
+  "actions": [
+    {
+      "type": "assign_trip_image",
+      "invoice": "invoices/打车发票原文件名.pdf",
+      "trip_seq": 1,
+      "slot": "支付记录",
+      "image": "images/IMG_2615.PNG",
+      "purchase_date": "2026/7/7",
+      "reason": "OCR 乘车时间与行程单上车时间匹配"
     }
-  }
+  ]
 }
 ```
 
-- `类型` 从 OCR 缓存的 `kind` 字段读取。
-- `购买日期` 从支付记录 OCR 的 `payment_date` 写入发票 entry 的 `购买日期`。
-- 写入后，从 `未匹配截图[]` 删除该图片。
+- `slot` 从 OCR 缓存的 `kind` 字段读取。
+- `purchase_date` 从支付记录 OCR 的 `payment_date` 读取；没有就省略。
+- 如果需要替换已有图片，添加 `replace` 和 `ignore_replaced: true`。
 - 所有路径必须使用原始路径：`invoices/<原发票文件名>`、`images/<原截图文件名>`。
-- 不要向 `匹配记录.json` 写入金额、打车平台、服务商、车型、上车时间、更新后文件名或发票序号等可从其它文件重算的字段。
+- 不要在 action 中写入金额、打车平台、服务商、车型、上车时间、更新后文件名或发票序号等可从其它文件重算的字段。
+
+写完 action 文件后运行：
+
+```bash
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-trip-ambiguity.actions.json
+```
+
+如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
 
 ## 输出
 
