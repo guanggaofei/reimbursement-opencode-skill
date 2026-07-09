@@ -14,7 +14,7 @@ permission:
 
 ## 数据来源
 
-- `invoice_results_sorted.json` — 候选发票信息。只使用原始发票名 `invoices/<文件名>` 定位；`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
+- `invoice_results_sorted.json` — 候选发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 `ocr_text`、`kind`、`amounts`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中。
 - `支出记录OCR匹配明细.md` — 仅作为人工阅读报告，不作为状态来源。
@@ -24,7 +24,7 @@ permission:
 
 1. 在 `支出记录OCR匹配明细.md` 中查找 `金额对应多个候选发票`，确定待处理图片和候选发票。
 2. 对每张待处理图片，用原始路径 `images/<图片名>` 读取 `OCR缓存.json` 中的 OCR 原文、金额、类型和支付日期。
-3. 在 `invoice_results_sorted.json` 中按原始发票名 `文件名` 定位候选条目，提取 `销售方名称`、`项目列表`。不要用 `更新后文件名` 或序号定位。
+3. 在 `invoice_results_sorted.json` 中按 `文件名` 字段定位候选条目，提取 `销售方名称`、`项目列表`。不要用 `更新后文件名` 或序号定位。
 4. 由你自行比较店铺名称和商品描述：
    - 支付记录通常有带 `**` 的收款方提示，如 `鸿康**店`。
    - 账单截图通常包含完整店铺名称，如 `鸿康明五金旗舰店`。
@@ -67,7 +67,7 @@ permission:
 - `slot` 从 OCR 缓存的 `kind` 字段读取，只能是 `支付记录` 或 `账单截图`。
 - `purchase_date` 从支付记录 OCR 的 `payment_date` 读取；没有就省略。
 - 如果需要替换已有图片，添加 `replace` 和 `ignore_replaced: true`。
-- 所有路径必须使用原始路径：`invoices/<原发票文件名>`、`images/<原截图文件名>`。
+- 所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>`、`images/<原截图文件名>`。
 - 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
 
 写完 action 文件后运行：

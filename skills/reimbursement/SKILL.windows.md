@@ -257,7 +257,7 @@ Remove-Item -Force 支出记录OCR整理结果.md, 支出记录OCR匹配明细.m
    - 类型 D: `未匹配到截图的发票` — 完全无截图的发票，通过搜索 OCR 关键词寻找缺失截图。
 5. 询问用户先修复哪种类型。一次只修复一种类型。对每种类型，必须使用对应的 subagent（`@fix-shop-name-ambiguity` / `@fix-trip-ambiguity` / `@fix-duplicate-screenshots` / `@fix-bearing-invoice`）。提示词已经在 `.opencode/agents/` 文件夹中写好，你必须按照该文件夹中的文件来输出提示词。
 
-**重要（匹配记录机制）：** subagent 直接维护 `匹配记录.json`。它只保存原发票名、原图片名和归属关系；金额、类型、平台、服务商、车型、当前排序名等都从 `invoice_results_sorted.json`、`OCR缓存.json`、`行程单数据.json` 或行程单 PDF 读取，不写入 `匹配记录.json`。每次确认匹配后，写入 `发票映射`，并从 `未匹配截图[]` 删除对应图片；重复或废弃图片写入 `忽略截图[]`。所有路径必须使用原名：`invoices/<原发票文件名>` 和 `images/<原截图文件名>`。示例：
+**重要（匹配记录机制）：** subagent 直接维护 `匹配记录.json`。它只保存基于 `invoice_results_sorted.json` 的 `文件名` 字段构造的发票路径、原图片名和归属关系；金额、类型、平台、服务商、车型、当前排序名等都从 `invoice_results_sorted.json`、`OCR缓存.json`、`行程单数据.json` 或行程单 PDF 读取，不写入 `匹配记录.json`。每次确认匹配后，写入 `发票映射`，并从 `未匹配截图[]` 删除对应图片；重复或废弃图片写入 `忽略截图[]`。所有路径必须使用稳定状态路径：`invoices/<invoice_results_sorted.json 的 文件名 字段值>` 和 `images/<原截图文件名>`。示例：
 ```json
 {
   "发票映射": {
@@ -387,7 +387,7 @@ subagent 执行后，运行验证脚本查看当前缺失状态：
 
 #### 8.6. 分析：`未匹配到截图的发票`（关键词搜索+金额组合）
 
-使用 subagent `@fix-bearing-invoice` 分析。主流程先运行 `verify_screenshot_coverage --update-report` 获取缺失列表，将未匹配的原始发票路径（如 `invoices/example.pdf`）传入 subagent。subagent 直接更新 `匹配记录.json`。完成后，主流程展示无法匹配的条目并刷新覆盖率报告。
+使用 subagent `@fix-bearing-invoice` 分析。主流程先运行 `verify_screenshot_coverage --update-report` 获取缺失列表，将未匹配的稳定发票路径（如 `invoices/example.pdf`，其中 `example.pdf` 来自 `invoice_results_sorted.json` 的 `文件名` 字段）传入 subagent。subagent 直接更新 `匹配记录.json`。完成后，主流程展示无法匹配的条目并刷新覆盖率报告。
 
 subagent 提示词：
 
@@ -395,7 +395,7 @@ subagent 提示词：
 
 **输入：**
 
-主流程传入要处理的原始发票路径列表，如 `"invoices/example.pdf,invoices/example2.pdf"`。序号和 `更新后文件名` 只作展示，不作状态索引。
+主流程传入要处理的稳定发票路径列表，如 `"invoices/example.pdf,invoices/example2.pdf"`，其中文件名部分必须来自 `invoice_results_sorted.json` 的 `文件名` 字段。序号和 `更新后文件名` 只作展示，不作状态索引。
 
 **相关数据：**
 - `invoice_results_sorted.json` — 获取所有发票的原始 `文件名`、`销售方名称`、`价税合计金额`、`项目列表`
@@ -406,7 +406,7 @@ subagent 提示词：
 
 第 1 步：确定待处理发票
 1. 从 `invoice_results_sorted.json` 读取所有发票
-2. 只处理主流程指定的原始发票路径
+2. 只处理主流程指定的稳定发票路径，即 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`
 3. 跳过 `匹配记录.json` 中已有支付记录和账单截图的发票
 
 第 2 步：关键词提取
@@ -438,7 +438,7 @@ subagent 提示词：
 **输出：**
 
 每处理完一组发票后，直接更新 `匹配记录.json`：
-- 匹配成功图片写入 `发票映射["invoices/<原发票名>"]["支付记录"|"账单截图"]`
+- 匹配成功图片写入 `发票映射["invoices/<invoice_results_sorted.json 的 文件名 字段值>"]["支付记录"|"账单截图"]`
 - 购买日期从匹配的支付记录中取最早的，写入该发票 entry 的 `购买日期`
 - 无法匹配的图片继续保留在 `未匹配截图[]`，其中只写 `图片` 和 `原因`
 - 所有路径保持 `images/<原图片名>`，不重命名

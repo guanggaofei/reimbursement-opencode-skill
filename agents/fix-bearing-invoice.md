@@ -14,11 +14,11 @@ permission:
 
 ## 输入
 
-主流程传入要处理的原始发票路径列表，如 `"invoices/example.pdf,invoices/example2.pdf"`。序号和 `更新后文件名` 只能作为展示信息，不可作为状态索引。
+主流程传入要处理的稳定发票路径列表，如 `"invoices/example.pdf,invoices/example2.pdf"`，其中 `example.pdf` 必须来自 `invoice_results_sorted.json` 的 `文件名` 字段。序号和 `更新后文件名` 只能作为展示信息，不可作为状态索引。
 
 ## 数据来源
 
-- `invoice_results_sorted.json` — 获取发票的原始 `文件名`、`销售方名称`、`价税合计金额`、`项目列表`。不要用 `更新后文件名` 或序号定位。
+- `invoice_results_sorted.json` — 获取发票的 `文件名`、`销售方名称`、`价税合计金额`、`项目列表`。不要用 `更新后文件名` 或序号定位。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，提取 `ocr_text`、`kind`、`amounts`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；只搜索 `未匹配截图[]` 中的图片。
 - `fix-bearing-invoice.actions.json` — 本 subagent 输出的操作文件。
@@ -27,7 +27,7 @@ permission:
 
 ### 第 1 步：确定待处理发票
 1. 从 `invoice_results_sorted.json` 读取所有发票。
-2. 只处理主流程指定的原始发票路径。
+2. 只处理主流程指定的稳定发票路径，即 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`。
 3. 跳过 `匹配记录.json` 中已经有 `支付记录` 和 `账单截图` 的发票。
 
 ### 第 2 步：关键词提取
@@ -79,7 +79,7 @@ permission:
 }
 ```
 
-- `发票映射` key 必须是原始发票路径 `invoices/<invoice_results_sorted.json 中的 文件名>`。
+- `发票映射` key 必须是稳定发票路径 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`。
 - `slot` 使用 `OCR缓存.json` 的 `kind` 字段决定，只能是 `支付记录` 或 `账单截图`。
 - `purchase_date` 从匹配的支付记录 `payment_date` 取最早日期；没有就省略。
 - 若同一发票同类型需要多张截图，必须设置顶层 `allow_multiple_same_slot: true`，并在每条相关 action 中写明 `exception_reason`。
