@@ -20,7 +20,7 @@ description: "Trigger when the user indicates they are executing the reimburseme
 
 ### Python 环境
 
-本项目依赖安装在 `.venv` 中的 Python 包。opencode 自身执行脚本时会自动使用 `.venv`。**当告知用户手动运行命令时（如 OCR 步骤），必须在命令前加上 `source .venv/bin/activate &&`** 以确保使用正确的虚拟环境。
+本文件适用于 Linux 和 macOS。项目依赖安装在 `.venv` 中的 Python 包。opencode 自身执行脚本时会自动使用 `.venv`。**当告知 Linux/macOS 用户手动运行命令时（如 OCR 步骤），必须在命令前加上 `source .venv/bin/activate &&`** 以确保使用正确的虚拟环境。
 
 若用户未指定且项目根目录不存在 `.venv` 目录，自动创建：
 
@@ -32,7 +32,7 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ### 所需 Python 包
 
-- `pdftotext`（**系统二进制**，来自 `poppler-utils`，通过 `subprocess` 调用）用于 PDF 文本提取。通过 `apt install poppler-utils` 安装。
+- `pdftotext`（**系统二进制**，来自 Poppler，通过 `subprocess` 调用）用于 PDF 文本提取。Linux 可通过 `apt install poppler-utils` 安装；macOS 可通过 `brew install poppler` 安装。
 - `pdfplumber` 作为 PDF 回退读取方案（当 pdftotext 不可用时）。
 - `rapidocr-onnxruntime` 和 `onnxruntime` 用于费用截图 OCR。
 - `Pillow` 用于生成 DOCX 时的图片处理。
