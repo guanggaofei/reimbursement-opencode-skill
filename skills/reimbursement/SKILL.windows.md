@@ -36,6 +36,7 @@ py -m venv .venv
 - `rapidocr-onnxruntime` 和 `onnxruntime` 用于费用截图 OCR。
 - `Pillow` 用于生成 DOCX 时的图片处理。
 - `pypinyin` 用于 `super_invoice.py` 中的汉字转拼音。
+- `pypdf` 用于合并 `output/` 中的发票和行程单 PDF，并将页面居中放入 A4 纵向页面。
 - `python-docx` 用于生成支付记录 DOCX。
 - `lxml` 用于 XML 级别的 xlsx 和 DOCX 编辑。
 
@@ -53,6 +54,7 @@ py -m venv .venv
 | `scripts/generate_payment_record_docx.py` | 支付记录 DOCX 生成器。 |
 | `scripts/generate_reimbursement_xlsx.py` | XML 级别的报销 xlsx 填充器。 |
 | `scripts/generate_payment_explanations.py` | XML 级别的支付说明 DOCX 生成器。 |
+| `scripts/merge_output_pdfs.py` | 合并 `output/` 中所有发票和行程单 PDF，生成 A4 纵向居中打印版 PDF。 |
 | `scripts/extract_trip_sheets.py` | 从行程单 PDF 中提取行程数据到 JSON。 |
 | `scripts/apply_invoice_fixes.py` | 将 `invoice_fixes.json` 中的修复批量写入 `invoice_results.json`（步骤 5）。 |
 | `scripts/verify_screenshot_coverage.py` | 验证截图覆盖率，读取 `匹配记录.json` 与 `invoice_results_sorted.json` + `行程单数据.json` 交叉比对，输出缺失报告（步骤 8）。 |
@@ -71,12 +73,24 @@ py -m venv .venv
 
 - `assets/templates/` — 内置模板；无需在根目录放置模板。
 
-### 项目输入目录
+### 关键文件与目录
 
-以下目录预设于项目根目录（`--root`），在运行任何工作流步骤前必须存在：
+以下路径均位于项目根目录（`--root`）：
 
-- `invoices/` 存放发票 PDF 和出租车行程单。
-- `images/` 存放运行 OCR 时的费用截图。
+- `invoices/` — 输入目录，存放原始发票 PDF 和出租车行程单。
+- `images/` — 输入目录，存放费用截图。
+- `output/` — `super_invoice.py` 分类整理出的发票和行程单 PDF。
+- `invoice_results.json` — 发票提取中间结果，在修复 ERROR / 需人工校验字段时允许修改。
+- `invoice_results_sorted.json` — 最终排序结果，只读，后续生成 DOCX/XLSX/PDF 的主要发票数据来源。
+- `invoice_errors.json` — 支付记录和支付说明生成依据，只读。
+- `匹配记录.json` — 截图匹配状态文件，使用 `invoices/<文件名>` 和 `images/<图片名>` 稳定路径。
+- `OCR缓存.json` — 费用截图 OCR 缓存。
+- `行程单数据.json` — 行程单明细提取结果。
+- `Hello World 2026支出记录填写结果.docx` — 支出记录 DOCX。
+- `支付记录/` — 连号发票需要的支付记录 DOCX。
+- `支付说明/` — 必要时生成的支付说明 DOCX。
+- `Hello World 2026报账单填写结果.xlsx` — 报账单 XLSX。
+- `合并发票_纵向居中.pdf` — 合并 `output/` 中所有发票和行程单后的 A4 纵向打印版 PDF。
 
 ## 发票工作流
 
@@ -93,7 +107,7 @@ Remove-Item -Recurse -Force output, 支付记录, 支付说明 -ErrorAction Sile
 Remove-Item -Force invoice_results.json, invoice_results_sorted.json, invoice_errors.json -ErrorAction SilentlyContinue
 Remove-Item -Force 行程单数据.json -ErrorAction SilentlyContinue
 Remove-Item -Force 支出记录OCR整理结果.md, 支出记录OCR匹配明细.md -ErrorAction SilentlyContinue
-Remove-Item -Force 'Hello World 2026报账单填写结果.xlsx', 'Hello World 2026支出记录填写结果.docx', 支出记录DOCX生成结果.md -ErrorAction SilentlyContinue
+Remove-Item -Force 'Hello World 2026报账单填写结果.xlsx', 'Hello World 2026支出记录填写结果.docx', 支出记录DOCX生成结果.md, '合并发票_纵向居中.pdf' -ErrorAction SilentlyContinue
 ```
 
 保留 `invoices/`、`images/`、`OCR缓存.json`、`匹配记录.json`、`第x批报账单.xlsx`、`.opencode/skills/reimbursement/` 和 `.venv/` 不受影响。`匹配记录.json` 是跨批次复用的稳定匹配状态，不得在清理步骤删除。
@@ -586,7 +600,17 @@ subagent 分析返回后，主流程：
 
 直接编辑 `xl/worksheets/sheet1.xml`。映射：`C=购买日期`、`D=支出内容`、`E=项目类别`、`F=支出类别`、`I=发票金额`、`K=发票号码`。填充 `A=报销批次` 为 `n`，`B=序号` 从 1 开始。`购买日期` 来自 OCR 的 `支付时间`，缺失时留空。`支出内容` ≤ 5 个中文字符，从商品文本推断。出租车：`项目类别=差旅`、`支出类别=差旅费`。非出租车：`项目类别=步兵机器人`、`支出类别=机械标准件`。发票号码作为 Excel 公式字符串。`实际支出金额` 留空。使用 Python 的 `zipfile.testzip()` 验证。
 
-### 12. 验证
+### 12. 合并发票和行程单 PDF
+
+所有 DOCX 和 XLSX 生成完成后，将 `output/` 中所有发票和行程单合并为一个适合纵向打印的 PDF：
+
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\merge_output_pdfs.py --root .
+```
+
+输出 `合并发票_纵向居中.pdf`。每页为 A4 纵向，原 PDF 页面等比例缩放并居中放置；默认左右不额外留白，上下保留 72pt 留白，避免打印机自动旋转或裁切。
+
+### 13. 验证
 
 预期成功状态：
 - `invoice_results.json` 和 `invoice_results_sorted.json` 没有 `ERROR` 或 `需人工校验`。
@@ -594,3 +618,4 @@ subagent 分析返回后，主流程：
 - `匹配记录.json` 包含 OCR 自动匹配和人工匹配后的截图关系，所有截图路径指向 `images/` 原文件。
 - `Hello World 2026报账单填写结果.xlsx` 和 `Hello World 2026支出记录填写结果.docx` 存在且通过 zipfile 验证。
 - 任何生成的 `支付记录/` 和 `支付说明/` DOCX 文件通过 zipfile 验证。
+- `合并发票_纵向居中.pdf` 存在，页数等于 `output/` 中所有 PDF 页数之和，每页为 A4 纵向。
