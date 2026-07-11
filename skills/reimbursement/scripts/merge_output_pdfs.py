@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge output PDFs onto centered portrait A4 pages."""
+"""Merge ordinary offline-submission PDFs onto centered portrait A4 pages."""
 
 from __future__ import annotations
 
@@ -24,7 +24,11 @@ def natural_key(path: Path) -> list[object]:
 
 
 def collect_pdfs(input_dir: Path) -> list[Path]:
-    return sorted((path for path in input_dir.rglob("*.pdf") if path.is_file()), key=natural_key)
+    included_dirs = [input_dir / "1_材料费", input_dir / "2_打车费"]
+    return sorted(
+        (path for directory in included_dirs if directory.is_dir() for path in directory.rglob("*.pdf") if path.is_file()),
+        key=natural_key,
+    )
 
 
 def page_size(page: PageObject) -> tuple[float, float]:

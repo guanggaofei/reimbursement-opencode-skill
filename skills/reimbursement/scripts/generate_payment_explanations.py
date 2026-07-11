@@ -352,23 +352,41 @@ def make_docx(
 def warning_groups(errors: dict[str, Any], invoices_by_source: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
 
+    def ordinary_invoice(inv: dict[str, Any]) -> bool:
+        if "辰景" in str(inv.get("购买方名称") or ""):
+            return True
+        for line in inv.get("项目列表") or []:
+            try:
+                if money(line.get("单价")) > Decimal("1000"):
+                    return False
+            except Exception:
+                continue
+        return True
+
     for group in errors.get("连号发票", []) or []:
         invoices = [invoices_by_source[item["文件名"]] for item in group.get("所有重复发票", [])]
         if not invoices:
             continue
-        if any(inv.get("行程单文件名") != "无需" for inv in invoices):
+        if any(inv.get("行程单文件名") != "无需" for inv in invoices) or not all(ordinary_invoice(inv) for inv in invoices):
             continue
         display_indexes = [invoice_display_index(inv) for inv in invoices]
         groups.append({"kind": "连号发票", "invoices": invoices, "indexes": display_indexes})
 
-    for item in errors.get("价税合计超1000元", []) or []:
-        filename = item.get("文件名")
-        if filename not in invoices_by_source:
+    grouped_files = {inv["文件名"] for group in groups for inv in group["invoices"]}
+    for category, entries in errors.items():
+        if category == "连号发票":
             continue
-        inv = invoices_by_source[filename]
-        if inv.get("行程单文件名") != "无需":
-            continue
-        groups.append({"kind": "价税合计超1000元", "invoices": [inv], "indexes": [invoice_display_index(inv)]})
+        for item in entries or []:
+            reason = str(item.get("问题原因") or "")
+            if "支付说明" not in reason or "支付记录" not in reason:
+                continue
+            filename = item.get("文件名")
+            if filename not in invoices_by_source or filename in grouped_files:
+                continue
+            inv = invoices_by_source[filename]
+            if inv.get("行程单文件名") != "无需" or not ordinary_invoice(inv):
+                continue
+            groups.append({"kind": category, "invoices": [inv], "indexes": [invoice_display_index(inv)]})
 
     return groups
 
@@ -380,7 +398,16 @@ def output_name(group: dict[str, Any]) -> str:
     elif indexes == list(range(indexes[0], indexes[-1] + 1)):
         index_part = f"{indexes[0]}-{indexes[-1]}"
     else:
-        index_part = "-".join(str(i) for i in indexes)
+        parts: list[str] = []
+        start = end = indexes[0]
+        for value in indexes[1:]:
+            if value == end + 1:
+                end = value
+            else:
+                parts.append(str(start) if start == end else f"{start}-{end}")
+                start = end = value
+        parts.append(str(start) if start == end else f"{start}-{end}")
+        index_part = "&".join(parts)
     return f"xxx_{index_part}_支付说明.docx"
 
 

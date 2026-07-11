@@ -50,6 +50,32 @@ def collect_images(images: list[Path], images_dir: Path | None, pattern: str, ro
     return sorted(path for path in images_dir.rglob(pattern) if path.is_file())
 
 
+def index_text(indexes: list[int]) -> str:
+    values = sorted(set(indexes))
+    ranges: list[str] = []
+    start = end = values[0]
+    for value in values[1:]:
+        if value == end + 1:
+            end = value
+            continue
+        ranges.append(str(start) if start == end else f"{start}-{end}")
+        start = end = value
+    ranges.append(str(start) if start == end else f"{start}-{end}")
+    return "&".join(ranges)
+
+
+def is_high_unit_price(inv: dict) -> bool:
+    if "辰景" in str(inv.get("购买方名称") or ""):
+        return False
+    for item in inv.get("项目列表", []):
+        try:
+            if float(item.get("单价")) > 1000:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def auto_collect_groups_from_record(errors_path: Path, results_path: Path, match_record: Path, root: Path) -> list[dict]:
     """Read invoice_errors.json and collect payment images from 匹配记录.json."""
     root = root.resolve()
@@ -60,29 +86,50 @@ def auto_collect_groups_from_record(errors_path: Path, results_path: Path, match
     invoices_by_source = {inv["文件名"]: inv for inv in results.get("发票信息", [])}
 
     groups: list[dict] = []
+    candidates: list[list[dict]] = []
     for entry in errors.get("连号发票", []) or []:
         reason = entry.get("问题原因", "")
         if "需要额外添加支付说明与支付记录" not in reason:
             continue
         items = entry.get("所有重复发票", [])
         inv_objs = [invoices_by_source[item["文件名"]] for item in items if item["文件名"] in invoices_by_source]
+        if inv_objs:
+            candidates.append(inv_objs)
+
+    grouped_files = {inv["文件名"] for group in candidates for inv in group}
+    for category, entries in errors.items():
+        if category == "连号发票":
+            continue
+        for entry in entries or []:
+            reason = str(entry.get("问题原因") or "")
+            if "支付说明" not in reason or "支付记录" not in reason:
+                continue
+            inv = invoices_by_source.get(entry.get("文件名"))
+            if inv and inv["文件名"] not in grouped_files:
+                candidates.append([inv])
+
+    for inv_objs in candidates:
+        inv_objs = [inv for inv in inv_objs if not is_high_unit_price(inv)]
         if not inv_objs:
             continue
-
         indexes: list[int] = []
         images: list[Path] = []
+        missing: list[str] = []
         for inv in inv_objs:
             indexes.append(display_index(inv))
             rec_entry = mapping.get(invoice_key(str(inv.get("文件名") or "")), {})
-            images.extend(image_paths(root, list(rec_entry.get("支付记录", []) or [])))
+            invoice_payment_images = image_paths(root, list(rec_entry.get("支付记录", []) or []))
+            if not invoice_payment_images:
+                missing.append(str(inv.get("文件名") or ""))
+            images.extend(invoice_payment_images)
 
-        if not images:
-            continue
-        min_idx, max_idx = min(indexes), max(indexes)
+        if missing:
+            raise RuntimeError(f"missing payment-record screenshots: {', '.join(missing)}")
+        idx_text = index_text(indexes)
         groups.append({
-            "title": f"xxx {min_idx}-{max_idx} 支付记录",
+            "title": f"xxx {idx_text} 支付记录",
             "images": sorted(images),
-            "output": root / "支付记录" / f"xxx_{min_idx}-{max_idx}_支付记录.docx",
+            "output": root / "支付记录" / f"xxx_{idx_text}_支付记录.docx",
         })
     return groups
 

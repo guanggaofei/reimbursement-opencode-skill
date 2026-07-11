@@ -66,12 +66,28 @@ def write_zip(path: Path, files: dict[str, bytes]) -> None:
             zout.writestr(name, data)
 
 
-def invoice_count(invoice_json: Path) -> int:
+def ordinary_invoices(invoice_json: Path) -> list[dict]:
     data = json.loads(invoice_json.read_text(encoding="utf-8"))
     invoices = data.get("发票信息", [])
     if not isinstance(invoices, list) or not invoices:
         raise RuntimeError(f"no invoice list found in {invoice_json}")
-    return len(invoices)
+    result = []
+    for inv in invoices:
+        if "辰景" not in str(inv.get("购买方名称") or ""):
+            high_price = False
+            for item in inv.get("项目列表") or []:
+                try:
+                    high_price = high_price or float(item.get("单价")) > 1000
+                except (TypeError, ValueError):
+                    pass
+            if high_price:
+                continue
+        result.append(inv)
+    return result
+
+
+def invoice_count(invoice_json: Path) -> int:
+    return len(ordinary_invoices(invoice_json))
 
 
 def find_table(root: etree._Element) -> etree._Element:
@@ -122,8 +138,7 @@ def image_aspect_from_file(path: Path, fallback: float) -> float:
 
 
 def images_from_match_record(root_dir: Path, match_record: Path, invoice_json: Path) -> tuple[dict[int, RowImages], list[str]]:
-    data = json.loads(invoice_json.read_text(encoding="utf-8"))
-    invoices = data.get("发票信息", [])
+    invoices = ordinary_invoices(invoice_json)
     rows: dict[int, RowImages] = {index: RowImages() for index in range(1, len(invoices) + 1)}
     skipped: list[str] = []
     record = load_match_record(match_record)

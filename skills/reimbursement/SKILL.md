@@ -55,7 +55,7 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 | `scripts/generate_payment_record_docx.py` | 支付记录 DOCX 生成器。 |
 | `scripts/generate_reimbursement_xlsx.py` | XML 级别的报销 xlsx 填充器。 |
 | `scripts/generate_payment_explanations.py` | XML 级别的支付说明 DOCX 生成器。 |
-| `scripts/merge_output_pdfs.py` | 合并 `output/` 中所有发票和行程单 PDF，生成 A4 纵向居中打印版 PDF。 |
+| `scripts/merge_output_pdfs.py` | 合并普通材料费和打车费 PDF，生成 A4 纵向居中打印版 PDF。 |
 | `scripts/extract_trip_sheets.py` | 从行程单 PDF 中提取行程数据到 JSON。 |
 | `scripts/check_invoice_errors.py` | 遍历 `invoice_results.json`，检测 `ERROR`、`需人工校验` 和空 `开票时间`，输出 `invoice_errors_raw.json`。 |
 | `scripts/apply_invoice_fixes.py` | 将 `invoice_fixes.json` 中的修复批量写入 `invoice_results.json`（步骤 5）。 |
@@ -91,10 +91,11 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 - `OCR缓存.json` — 费用截图 OCR 缓存。
 - `行程单数据.json` — 行程单明细提取结果。
 - `Hello World 2026支出记录填写结果.docx` — 支出记录 DOCX。
-- `支付记录/` — 连号发票需要的支付记录 DOCX。
+- `支付记录/` — 连号、价税合计超 1000 元及其他明确要求提交支付记录的发票所需 DOCX。
 - `支付说明/` — 必要时生成的支付说明 DOCX。
 - `Hello World 2026报账单填写结果.xlsx` — 报账单 XLSX。
-- `合并发票_纵向居中.pdf` — 合并 `output/` 中所有发票和行程单后的 A4 纵向打印版 PDF。
+- `报账单补充信息.json` — 用户确认的报销批次、姓名、支付宝账号，以及逐张发票的项目类别、支出类别、实际支出金额和备注。
+- `合并发票_纵向居中.pdf` — 普通材料费和打车费线下提交用 A4 纵向打印版 PDF。
 
 ## 发票工作流
 
@@ -193,6 +194,18 @@ python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
 8. 若新的 `error_count > 0` 且有下降，继续下一轮修复。
 
 超过 3 轮仍有错误时，停止并向用户展示 `invoice_errors_raw.json` 中剩余错误。
+
+#### 5.5. 按审核结果分流
+
+必须逐项处理 `invoice_errors.json`，不能把所有警告继续送入普通报销流程：
+
+- `抬头税号错误`：联系商家重开发票；当前抬头/税号以本批报销通知为准，指南中的浙江大学信息只是常见示例。
+- `家具`：该发票无法报销，联系商家重开发票。
+- `日用杂品`：在发票正面空白处注明“RoboMaster 比赛使用，用途为 xx”；若 `问题原因` 还明确要求支付说明与支付记录，则同时按步骤 10 处理。
+- `项目单价超1000元`：不进入普通报账单、支出记录和线下打印流程；及时填入“单价大额发票汇总表”，按表格要求提交发票、订单截图和支付记录。
+- `价税合计超1000元`：进入普通流程，同时提交支付记录；仅当支付记录收款方与发票销售方不同才生成支付说明。
+- `连号发票`：在报账单中连续排列并提交支付记录；仅当收款方与销售方不同才生成支付说明。
+- `打车发票缺少行程单`：补齐与发票一一对应的行程单后重新运行；打车发票不检查连号。
 
 ### 6. 跨批去重
 
@@ -429,19 +442,19 @@ for item in data.get('未匹配截图', []):
 python .opencode/skills/reimbursement/scripts/generate_expense_record_docx.py --root .
 ```
 
-读取 `invoice_results_sorted.json` 和 `匹配记录.json`，使用 `images/` 中的原始截图路径插图，使用模板 `assets/templates/Hello World 2026支出记录模板V1.0.docx`。写入 `Hello World 2026支出记录填写结果.docx` 和 `支出记录DOCX生成结果.md`。
+读取 `invoice_results_sorted.json` 和 `匹配记录.json`，使用 `images/` 中的原始截图路径插图，使用模板 `assets/templates/Hello World 2026支出记录模板V1.0.docx`。单价超过 1000 元的材料发票不写入普通支出记录。写入 `Hello World 2026支出记录填写结果.docx` 和 `支出记录DOCX生成结果.md`。
 
 图片按比例缩放到 9cm 宽。验证：`python -c "import zipfile; assert zipfile.ZipFile('Hello World 2026支出记录填写结果.docx').testzip() is None; print('OK')"`
 
 ### 10. 生成支付记录和支付说明 DOCX
 
-**触发条件：** `invoice_errors.json` 中有条目的 `问题原因` 包含 `需要额外添加支付说明与支付记录`。
+**支付记录触发条件：** 单张发票价税合计超过 1000 元、连号发票，或 `invoice_errors.json` 的其他条目明确要求额外添加支付记录。单价超过 1000 元的材料发票走特殊通道，不在此处生成普通流程材料。
 
 对每个符合条件的条目：
 
 #### 支付记录
 
-自动模式（推荐）：读取 `invoice_errors.json`，发现所有连号发票分组，从 `匹配记录.json` 收集对应发票的 `支付记录` 原图路径，为每组生成一个 DOCX。
+自动模式（推荐）：读取 `invoice_errors.json`，处理连号分组以及所有明确要求支付记录的单张发票，从 `匹配记录.json` 收集对应原图，为每组生成一个 DOCX。
 
 ```bash
 python .opencode/skills/reimbursement/scripts/generate_payment_record_docx.py --root .
@@ -456,7 +469,7 @@ python .opencode/skills/reimbursement/scripts/generate_payment_record_docx.py --
   --output 支付记录/xxx_<序号范围>_支付记录.docx
 ```
 
-跳过没有匹配到支付记录的发票。一个加粗居中的大标题 + 约 4cm 宽的图片。使用 `unzip -t` 验证。
+不得静默跳过缺少支付记录的发票；列出缺失项并停止。文件名为 `xxx_报账单序号_支付记录.docx`，不连续序号用 `&`、连续区间用 `-`（如 `19&21-32`）。图片顺序必须与报账单一致，金额与实际报销金额相对应，并集中放在一页 Word 中且打印后可辨认。使用 `unzip -t` 验证。
 
 #### 支付说明
 
@@ -489,21 +502,40 @@ python .opencode/skills/reimbursement/scripts/generate_payment_explanations.py -
 python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --root .
 ```
 
-读取 `invoice_results_sorted.json`、`匹配记录.json` 和模板 `assets/templates/Hello World 2026报账单模板V1.1.xlsx`。写入 `Hello World 2026报账单填写结果.xlsx`。
+运行前创建 `报账单补充信息.json`。字段包括全局的 `报销批次`、`姓名`、`支付宝账号`，以及按 `invoices/<原文件名>` 索引的 `发票补充信息`；逐张填写 `项目类别`、`支出类别`、`实际支出金额`，打车发票还必须填写包含起止地和同行者的 `备注`。购买日期优先取匹配支付记录的支付时间，无法提取时在补充信息中填写 `购买日期`；可选的 `支出内容` 用于覆盖自动识别结果。所有值必须来自用户确认、发票、行程单或支付记录，不得猜测。
 
-直接编辑 `xl/worksheets/sheet1.xml`。映射：`C=购买日期`、`D=支出内容`、`E=项目类别`、`F=支出类别`、`I=发票金额`、`K=发票号码`。填充 `A=报销批次` 为 `n`，`B=序号` 从 1 开始。`购买日期` 来自 OCR 的 `支付时间`，缺失时留空。`支出内容` ≤ 5 个中文字符，从商品文本推断。出租车：`项目类别=差旅`、`支出类别=差旅费`。非出租车：`项目类别=步兵机器人`、`支出类别=机械标准件`。发票号码作为 Excel 公式字符串。`实际支出金额` 留空。使用 `unzip -t` 验证。
+读取 `invoice_results_sorted.json`、`匹配记录.json`、`报账单补充信息.json` 和模板。单价超过 1000 元的材料发票不写入普通报账单。写入 `Hello World 2026报账单填写结果.xlsx`。
+
+必须填写实际批次而非 `n`；一张发票一行且不合并单元格；`I=发票价税合计`、`J=实际支出金额`，实际支出金额必须与支付记录一致且不得大于发票金额；`K=发票号码`；打车备注必须写明起止地和同行者；姓名和支付宝账号必须填写并确认。项目类别和支出类别必须使用模板下拉选项并按实际用途选择，不得统一硬编码。使用 `unzip -t` 验证。
 
 ### 12. 合并发票和行程单 PDF
 
-所有 DOCX 和 XLSX 生成完成后，将 `output/` 中所有发票和行程单合并为一个适合纵向打印的 PDF：
+所有 DOCX 和 XLSX 生成完成后，只合并普通材料费和打车费目录中的 PDF。单价超过 1000 元的材料发票与辰景发票无需线下打印，不得并入：
 
 ```bash
 python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
 ```
 
-输出 `合并发票_纵向居中.pdf`。每页为 A4 纵向，原 PDF 页面等比例缩放并居中放置；默认左右不额外留白，上下保留 72pt 留白，避免打印机自动旋转或裁切。
+输出 `合并发票_纵向居中.pdf`。每页为 A4 纵向，原 PDF 页面等比例缩放并居中放置；打车发票与对应行程单必须相邻。
 
-### 13. 验证
+### 13. 准备线上附件
+
+按指南命名并以附件形式上传到飞书对应组别，不得使用云文档链接：
+
+- `xxx_第n批报账单.xlsx`
+- `xxx_第n批支出记录.docx`
+- `xxx_第n批支付说明与支付记录.zip`（存在相关材料时）
+- `xxx_第n批辰景发票.zip`（存在辰景/货拉拉/差旅发票时）
+- `xxx_第n批invoice_error.json`，内容来自 `invoice_errors.json`，不是 `invoice_results_sorted.json`
+
+### 14. 线下提交检查
+
+- 普通材料费：发票纵向打印，二维码和税务局章完整清晰；支付说明、支付记录也打印，但无需签字。
+- 打车费：发票纵向打印并紧接对应行程单；二维码和税务局章完整清晰。打表纸质出租车发票、非“浙A”车辆发票不可报销。
+- 单价超过 1000 元的材料费及辰景/货拉拉/差旅发票无需线下打印。
+- 按报账单和支出记录顺序整理；每张发票正面显眼位置（避开左上角和夹子遮挡处）标序号，并签本人及另一位相关队员姓名；最后用夹子夹好放入基地发票箱。
+
+### 15. 验证
 
 预期成功状态：
 - `check_invoice_errors.py --root .` 返回无错误，且 `invoice_results_sorted.json` 没有 `ERROR` 或 `需人工校验`。
@@ -511,4 +543,4 @@ python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
 - `匹配记录.json` 包含 OCR 自动匹配和人工匹配后的截图关系，所有截图路径指向 `images/` 原文件。
 - `Hello World 2026报账单填写结果.xlsx` 和 `Hello World 2026支出记录填写结果.docx` 存在且通过 zipfile 验证。
 - 任何生成的 `支付记录/` 和 `支付说明/` DOCX 文件通过 zipfile 验证。
-- `合并发票_纵向居中.pdf` 存在，页数等于 `output/` 中所有 PDF 页数之和，每页为 A4 纵向。
+- `合并发票_纵向居中.pdf` 存在，页数等于 `output/1_材料费/` 与 `output/2_打车费/` 中 PDF 页数之和，每页为 A4 纵向。

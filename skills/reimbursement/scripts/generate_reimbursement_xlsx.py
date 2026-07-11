@@ -5,6 +5,11 @@ No intermediate CSV
     Reads invoice_results_sorted.json and 匹配记录.json directly.
     The legacy CSV step was removed — this script handles the full pipeline.
 
+Required supplemental data
+    Reads 报账单补充信息.json for values that cannot be inferred reliably from
+    invoices: batch number, claimant identity, project/category selection,
+    actual paid amount, and taxi remarks.
+
 Content inference (expense_content)
     Item text from the invoice is classified by keyword:
       - 轴承 → "轴承"
@@ -12,8 +17,8 @@ Content inference (expense_content)
       - 铝柱 / 铝合金 → "铝材"
       - 弹簧 → "弹簧"
       - 金属制品 → "标准件"
-    Otherwise, the text after the first bracket/paren is trimmed and
-    truncated to 5 Chinese characters.
+    Otherwise, the item text is cleaned without imposing a length limit that
+    is not present in the reimbursement guide.
 
 Invoice number format
     Written as formula strings (t="str") to prevent Excel from converting
@@ -60,6 +65,7 @@ DEFAULT_TEMPLATE = template_path("Hello World 2026报账单模板V1.1.xlsx")
 DEFAULT_SORTED_JSON = Path("invoice_results_sorted.json")
 DEFAULT_MATCH_RECORD = DEFAULT_MATCH_RECORD_PATH
 DEFAULT_OUTPUT = Path("Hello World 2026报账单填写结果.xlsx")
+DEFAULT_METADATA = Path("报账单补充信息.json")
 
 COLS = {
     "batch": "A",
@@ -68,8 +74,13 @@ COLS = {
     "content": "D",
     "project": "E",
     "category": "F",
-    "amount": "I",
+    "invoice_amount": "I",
+    "actual_amount": "J",
     "invoice_no": "K",
+    "remarks": "L",
+    "chenjing": "M",
+    "name": "N",
+    "alipay": "O",
 }
 
 
@@ -85,6 +96,18 @@ def is_taxi_invoice(inv: dict[str, Any]) -> bool:
     return str(inv.get("行程单文件名") or "").strip() not in ("", "无需", "ERROR")
 
 
+def is_high_unit_price_invoice(inv: dict[str, Any]) -> bool:
+    if "辰景" in str(inv.get("购买方名称") or ""):
+        return False
+    for item in inv.get("项目列表") or []:
+        try:
+            if Decimal(str(item.get("单价"))) > Decimal("1000"):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def expense_content(inv: dict[str, Any]) -> str:
     if is_taxi_invoice(inv):
         return "打车费"
@@ -98,10 +121,10 @@ def expense_content(inv: dict[str, Any]) -> str:
         (("金属制品",), "标准件"),
     ]:
         if any(needle in text for needle in needles):
-            return label[:5]
+            return label
     cleaned = re.sub(r"[【\\[（(].*$", "", text).strip()
     cleaned = re.sub(r"\s+", "", cleaned)
-    return (cleaned or "材料费")[:5]
+    return cleaned or "材料费"
 
 
 def read_purchase_dates_from_record(path: Path, invoices: list[dict[str, Any]]) -> dict[str, str]:
@@ -118,18 +141,52 @@ def read_purchase_dates_from_record(path: Path, invoices: list[dict[str, Any]]) 
     return dates
 
 
-def build_rows(invoices: list[dict[str, Any]], purchase_dates: dict[str, str]) -> list[dict[str, str]]:
+def metadata_for_invoice(metadata: dict[str, Any], inv: dict[str, Any]) -> dict[str, Any]:
+    overrides = metadata.get("发票补充信息") or {}
+    filename = str(inv.get("文件名") or "")
+    return overrides.get(f"invoices/{filename}") or overrides.get(filename) or {}
+
+
+def required_text(value: Any, label: str) -> str:
+    text = str(value or "").strip()
+    if not text or text == "n":
+        raise ValueError(f"报账单补充信息缺少有效的{label}")
+    return text
+
+
+def build_rows(
+    invoices: list[dict[str, Any]], purchase_dates: dict[str, str], metadata: dict[str, Any]
+) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for inv in invoices:
+        if is_high_unit_price_invoice(inv):
+            continue
         updated_file = str(inv.get("更新后文件名") or "")
         taxi = is_taxi_invoice(inv)
+        extra = metadata_for_invoice(metadata, inv)
+        project = required_text(extra.get("项目类别", metadata.get("默认项目类别")), "项目类别")
+        category = required_text(extra.get("支出类别", metadata.get("默认支出类别")), "支出类别")
+        actual_amount = required_text(extra.get("实际支出金额"), f"实际支出金额（{inv.get('文件名')}）")
+        invoice_amount = money_text(inv.get("价税合计金额"))
+        if Decimal(actual_amount) > Decimal(invoice_amount):
+            raise ValueError(f"{inv.get('文件名')} 的实际支出金额不能大于发票金额")
+        remarks = str(extra.get("备注") or "").strip()
+        if taxi and not remarks:
+            raise ValueError(f"打车发票 {inv.get('文件名')} 的备注必须写明起止地和同行者")
+        purchase_date = required_text(
+            extra.get("购买日期") or purchase_dates.get(updated_file),
+            f"购买日期（{inv.get('文件名')}）",
+        )
         rows.append({
-            "date": purchase_dates.get(updated_file, ""),
-            "content": expense_content(inv),
-            "project": "差旅" if taxi else "步兵机器人",
-            "category": "差旅费" if taxi else "机械标准件",
-            "amount": money_text(inv.get("价税合计金额")),
+            "date": purchase_date,
+            "content": str(extra.get("支出内容") or expense_content(inv)),
+            "project": project,
+            "category": category,
+            "invoice_amount": invoice_amount,
+            "actual_amount": money_text(actual_amount),
             "invoice_no": str(inv.get("发票号码") or ""),
+            "remarks": remarks,
+            "chenjing": "是" if "辰景" in str(inv.get("购买方名称") or "") else "否",
         })
     return rows
 
@@ -214,9 +271,11 @@ def row_cells(row: etree._Element) -> dict[str, etree._Element]:
     return {col_name(cell.get("r")): cell for cell in row.findall("m:c", NS) if cell.get("r")}
 
 
-def fill_row(row: etree._Element, row_index: int, data: dict[str, str]) -> None:
+def fill_row(
+    row: etree._Element, row_index: int, data: dict[str, str], metadata: dict[str, Any]
+) -> None:
     cells = row_cells(row)
-    set_text(cells[COLS["batch"]], "n")
+    set_text(cells[COLS["batch"]], required_text(metadata.get("报销批次"), "报销批次"))
     set_number(cells[COLS["seq"]], row_index)
     serial = excel_serial(data["date"])
     if serial is None:
@@ -226,9 +285,14 @@ def fill_row(row: etree._Element, row_index: int, data: dict[str, str]) -> None:
     set_text(cells[COLS["content"]], data["content"])
     set_text(cells[COLS["project"]], data["project"])
     set_text(cells[COLS["category"]], data["category"])
-    set_number(cells[COLS["amount"]], Decimal(data["amount"]))
+    set_number(cells[COLS["invoice_amount"]], Decimal(data["invoice_amount"]))
+    set_number(cells[COLS["actual_amount"]], Decimal(data["actual_amount"]))
     formula, cached = invoice_number_formula(f'="{data["invoice_no"]}"')
     set_formula_string(cells[COLS["invoice_no"]], formula, cached)
+    set_text(cells[COLS["remarks"]], data["remarks"])
+    set_text(cells[COLS["chenjing"]], data["chenjing"])
+    set_text(cells[COLS["name"]], required_text(metadata.get("姓名"), "姓名"))
+    set_text(cells[COLS["alipay"]], required_text(metadata.get("支付宝账号"), "支付宝账号"))
 
 
 def generate(args: argparse.Namespace) -> None:
@@ -241,7 +305,13 @@ def generate(args: argparse.Namespace) -> None:
     if not match_record.exists():
         raise RuntimeError(f"match record not found: {match_record}")
     purchase_dates = read_purchase_dates_from_record(match_record, invoices)
-    rows = build_rows(invoices, purchase_dates)
+    metadata_path = resolve_path(root, args.metadata)
+    if not metadata_path.exists():
+        raise RuntimeError(f"supplemental metadata not found: {metadata_path}")
+    metadata = read_json(metadata_path)
+    rows = build_rows(invoices, purchase_dates, metadata)
+    if not rows:
+        raise RuntimeError("No ordinary reimbursement invoices found; high-unit-price invoices use the special channel")
 
     files = read_zip(resolve_path(root, args.template))
     root = etree.fromstring(files[SHEET_PATH])
@@ -264,7 +334,7 @@ def generate(args: argparse.Namespace) -> None:
         row.set("r", str(excel_row))
         for cell in row.findall("m:c", NS):
             update_cell_ref(cell, excel_row)
-        fill_row(row, index, data_row)
+        fill_row(row, index, data_row, metadata)
         sheet_data.append(row)
 
     final_row = len(rows) + 1
@@ -287,6 +357,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--sorted-json", type=Path, default=DEFAULT_SORTED_JSON)
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
+    parser.add_argument("--metadata", type=Path, default=DEFAULT_METADATA)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser.parse_args()
 
