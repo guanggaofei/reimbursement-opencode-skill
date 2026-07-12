@@ -94,7 +94,6 @@ python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
 - `支付记录/` — 连号、价税合计超 1000 元及其他明确要求提交支付记录的发票所需 DOCX。
 - `支付说明/` — 必要时生成的支付说明 DOCX。
 - `Hello World 2026报账单填写结果.xlsx` — 报账单 XLSX。
-- `报账单补充信息.json` — 用户确认的报销批次、姓名、支付宝账号，以及逐张发票的项目类别、支出类别、实际支出金额和备注。
 - `合并发票_纵向居中.pdf` — 普通材料费和打车费线下提交用 A4 纵向打印版 PDF。
 
 ## 发票工作流
@@ -502,11 +501,9 @@ python .opencode/skills/reimbursement/scripts/generate_payment_explanations.py -
 python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --root .
 ```
 
-运行前创建 `报账单补充信息.json`。字段包括全局的 `报销批次`、`姓名`、`支付宝账号`，以及按 `invoices/<原文件名>` 索引的 `发票补充信息`；逐张填写 `项目类别`、`支出类别`、`实际支出金额`，打车发票还必须填写包含起止地和同行者的 `备注`。购买日期优先取匹配支付记录的支付时间，无法提取时在补充信息中填写 `购买日期`；可选的 `支出内容` 用于覆盖自动识别结果。所有值必须来自用户确认、发票、行程单或支付记录，不得猜测。
+读取 `invoice_results_sorted.json`、`匹配记录.json` 和模板 `assets/templates/Hello World 2026报账单模板V1.1.xlsx`。写入 `Hello World 2026报账单填写结果.xlsx`。
 
-读取 `invoice_results_sorted.json`、`匹配记录.json`、`报账单补充信息.json` 和模板。单价超过 1000 元的材料发票不写入普通报账单。写入 `Hello World 2026报账单填写结果.xlsx`。
-
-必须填写实际批次而非 `n`；一张发票一行且不合并单元格；`I=发票价税合计`、`J=实际支出金额`，实际支出金额必须与支付记录一致且不得大于发票金额；`K=发票号码`；打车备注必须写明起止地和同行者；姓名和支付宝账号必须填写并确认。项目类别和支出类别必须使用模板下拉选项并按实际用途选择，不得统一硬编码。使用 `unzip -t` 验证。
+直接编辑 `xl/worksheets/sheet1.xml`。映射：`C=购买日期`、`D=支出内容`、`E=项目类别`、`F=支出类别`、`I=发票金额`、`K=发票号码`。填充 `A=报销批次` 为 `n`，`B=序号` 从 1 开始。`购买日期` 来自 OCR 的 `支付时间`，缺失时留空。`支出内容` ≤ 5 个中文字符，从商品文本推断。出租车：`项目类别=差旅`、`支出类别=差旅费`。非出租车：`项目类别=步兵机器人`、`支出类别=机械标准件`。发票号码作为 Excel 公式字符串。`实际支出金额` 留空。使用 `unzip -t` 验证。
 
 ### 12. 合并发票和行程单 PDF
 
