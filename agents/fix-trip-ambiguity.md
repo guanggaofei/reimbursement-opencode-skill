@@ -15,25 +15,25 @@ permission:
 ## 数据来源
 
 - `invoice_results_sorted.json` — 发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
-- `行程单数据.json` — 行程明细（序号、服务商、车型、上车时间、起点终点、金额）。
+- `报销工作文件/行程单数据.json` — 行程明细（序号、服务商、车型、上车时间、起点终点、金额）。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 OCR 原文、`kind`、`taxi_platform`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中，匹配成功后通过 action 合入对应发票的 `行程明细[]`。
-- `支出记录OCR匹配明细.md` — 仅作为人工阅读报告。
-- `fix-trip-ambiguity.actions.json` — 本 subagent 输出的操作文件。
+- `报销工作文件/支出记录OCR匹配明细.md` — 仅作为代理诊断报告。
+- `报销工作文件/fix-trip-ambiguity.actions.json` — 本 subagent 输出的操作文件。
 
 ## 方法
 
-1. 全文查找 `支出记录OCR匹配明细.md` 中 `金额对应多个候选行程` 的图片。
+1. 全文查找 `报销工作文件/支出记录OCR匹配明细.md` 中 `金额对应多个候选行程` 的图片。
 2. 用 `images/<图片名>` 查 `OCR缓存.json`：
    - 读取 `taxi_platform` 区分高德/滴滴。
    - 支付记录：提取 OCR 原文中的乘车时间。
    - 账单截图：提取 OCR 原文中的服务商、车型、路线/地点。
-3. 从 `行程单数据.json` 查同金额候选行程：服务商、车型、上车时间、起点终点。
+3. 从 `报销工作文件/行程单数据.json` 查同金额候选行程：服务商、车型、上车时间、起点终点。
 4. 由你自行交叉判断：
    - 账单截图服务商 ≈ 行程单服务商，是主要依据。
    - 支付记录乘车时间 ≈ 行程单上车时间，通常 15 分钟内。
    - 路线信息仅作兜底。
-5. 能确认归属的图片写入 `fix-trip-ambiguity.actions.json`；无法确认的保留未匹配并说明原因。
+5. 能确认归属的图片写入 `报销工作文件/fix-trip-ambiguity.actions.json`；无法确认的保留未匹配并说明原因。
 
 ## 截图唯一性规则
 
@@ -49,7 +49,7 @@ permission:
 
 不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-打车行程匹配成功时，写入 `fix-trip-ambiguity.actions.json`：
+打车行程匹配成功时，写入 `报销工作文件/fix-trip-ambiguity.actions.json`：
 
 ```json
 {
@@ -77,7 +77,7 @@ permission:
 写完 action 文件后运行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-trip-ambiguity.actions.json
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-trip-ambiguity.actions.json
 ```
 
 如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。

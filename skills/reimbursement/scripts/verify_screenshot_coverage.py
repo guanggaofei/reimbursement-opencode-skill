@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import DEFAULT_MATCH_RECORD, invoice_images, invoice_key, load_match_record
 
 
@@ -166,7 +166,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_root_arg(parser)
     parser.add_argument("--sorted-json", type=Path, default=Path("invoice_results_sorted.json"))
-    parser.add_argument("--trip-json", type=Path, default=Path("行程单数据.json"))
+    parser.add_argument("--trip-json", type=Path, default=INTERNAL_DIR / "行程单数据.json")
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
     parser.add_argument("--ocr-cache", type=Path, default=Path("OCR缓存.json"))
     parser.add_argument("--update-report", type=Path, nargs="?", const=Path("支出记录OCR整理结果.md"), help="写入 Markdown 报告文件")

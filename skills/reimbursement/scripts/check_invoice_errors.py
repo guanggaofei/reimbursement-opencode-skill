@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 
 
 ERROR_VALUES = {"ERROR", "需人工校验"}
@@ -60,12 +60,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_root_arg(parser)
     parser.add_argument("--input", type=Path, default=Path("invoice_results.json"))
-    parser.add_argument("--output", type=Path, default=Path("invoice_errors_raw.json"))
+    parser.add_argument("--output", type=Path, default=INTERNAL_DIR / "invoice_errors_raw.json")
     args = parser.parse_args()
 
     root = args.root.resolve()
     input_path = resolve_path(root, args.input)
     output_path = resolve_path(root, args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         data = json.loads(input_path.read_text(encoding="utf-8"))

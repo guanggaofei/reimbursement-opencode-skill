@@ -15,7 +15,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 
 
 # Fixed-width column positions (approximate, in characters):
@@ -155,12 +155,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_root_arg(parser)
     parser.add_argument("--trip-dir", type=Path, default=Path("output/2_打车费"))
-    parser.add_argument("--output", type=Path, default=Path("行程单数据.json"))
+    parser.add_argument("--output", type=Path, default=INTERNAL_DIR / "行程单数据.json")
     args = parser.parse_args()
 
     root = args.root.resolve()
     trip_dir = resolve_path(root, args.trip_dir)
     output = resolve_path(root, args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     if not trip_dir.is_dir():
         print(f"trip dir not found: {trip_dir}")

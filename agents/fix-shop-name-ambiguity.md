@@ -17,12 +17,12 @@ permission:
 - `invoice_results_sorted.json` — 候选发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键，读取 `ocr_text`、`kind`、`amounts`、`payment_date`。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理图片在 `未匹配截图[]` 中。
-- `支出记录OCR匹配明细.md` — 仅作为人工阅读报告，不作为状态来源。
-- `fix-shop-name-ambiguity.actions.json` — 本 subagent 输出的操作文件。
+- `报销工作文件/支出记录OCR匹配明细.md` — 仅作为代理诊断报告，不作为状态来源。
+- `报销工作文件/fix-shop-name-ambiguity.actions.json` — 本 subagent 输出的操作文件。
 
 ## 方法
 
-1. 在 `支出记录OCR匹配明细.md` 中查找 `金额对应多个候选发票`，确定待处理图片和候选发票。
+1. 在 `报销工作文件/支出记录OCR匹配明细.md` 中查找 `金额对应多个候选发票`，确定待处理图片和候选发票。
 2. 对每张待处理图片，用原始路径 `images/<图片名>` 读取 `OCR缓存.json` 中的 OCR 原文、金额、类型和支付日期。
 3. 在 `invoice_results_sorted.json` 中按 `文件名` 字段定位候选条目，提取 `销售方名称`、`项目列表`。不要用 `更新后文件名` 或序号定位。
 4. 由你自行比较店铺名称和商品描述：
@@ -30,7 +30,7 @@ permission:
    - 账单截图通常包含完整店铺名称，如 `鸿康明五金旗舰店`。
    - 发票销售方名称来自 `销售方名称` 字段。
    - 去除地级市、有限公司等噪声后，看核心词重叠。
-5. 能确认归属的图片写入 `fix-shop-name-ambiguity.actions.json`；无法确认的保留在 `未匹配截图[]` 并说明原因。
+5. 能确认归属的图片写入 `报销工作文件/fix-shop-name-ambiguity.actions.json`；无法确认的保留在 `未匹配截图[]` 并说明原因。
 
 ## 截图唯一性规则
 
@@ -46,7 +46,7 @@ permission:
 
 不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-匹配成功时，写入 `fix-shop-name-ambiguity.actions.json`：
+匹配成功时，写入 `报销工作文件/fix-shop-name-ambiguity.actions.json`：
 
 ```json
 {
@@ -73,7 +73,7 @@ permission:
 写完 action 文件后运行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-shop-name-ambiguity.actions.json
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-shop-name-ambiguity.actions.json
 ```
 
 如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。

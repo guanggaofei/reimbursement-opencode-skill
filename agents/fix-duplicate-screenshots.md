@@ -15,11 +15,11 @@ permission:
 ## 数据来源
 
 - `invoice_results_sorted.json` — 发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
-- `行程单数据.json` — 打车候选行程。
+- `报销工作文件/行程单数据.json` — 打车候选行程。
 - `OCR缓存.json` — 以 `images/<原图片名>` 为键读取 OCR 原文、`kind`、金额、支付日期和打车平台。
 - `匹配记录.json` — 唯一匹配状态文件。只读取，不直接编辑；待处理冲突图片在 `未匹配截图[]` 中。
-- `支出记录OCR匹配明细.md` — 用于定位 `同时匹配同一发票，需人工识别`。
-- `fix-duplicate-screenshots.actions.json` — 本 subagent 输出的操作文件。
+- `报销工作文件/支出记录OCR匹配明细.md` — 用于定位 `同时匹配同一发票，需人工识别`。
+- `报销工作文件/fix-duplicate-screenshots.actions.json` — 本 subagent 输出的操作文件。
 
 ## 步骤
 
@@ -47,7 +47,7 @@ permission:
 
 不要直接编辑 `匹配记录.json`，不移动、不复制、不删除任何图片。
 
-保留图片匹配成功时，写入 `fix-duplicate-screenshots.actions.json`：
+保留图片匹配成功时，写入 `报销工作文件/fix-duplicate-screenshots.actions.json`：
 
 ```json
 {
@@ -88,7 +88,7 @@ permission:
 写完 action 文件后运行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions fix-duplicate-screenshots.actions.json
+python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-duplicate-screenshots.actions.json
 ```
 
 如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。

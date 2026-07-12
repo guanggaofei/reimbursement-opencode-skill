@@ -7,9 +7,10 @@ import argparse
 from copy import copy
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pypdf import PdfReader, PdfWriter, Transformation
-from pypdf._page import PageObject
+if TYPE_CHECKING:
+    from pypdf._page import PageObject
 
 from _pathutil import add_root_arg, resolve_path
 
@@ -37,6 +38,9 @@ def page_size(page: PageObject) -> tuple[float, float]:
 
 
 def center_page_on_a4(page: PageObject, margin_x: float, margin_y: float) -> PageObject:
+    from pypdf import Transformation
+    from pypdf._page import PageObject
+
     # Normalize page rotation so dimensions and content transform match.
     page = copy(page)
     if page.rotation:
@@ -56,6 +60,8 @@ def center_page_on_a4(page: PageObject, margin_x: float, margin_y: float) -> Pag
 
 
 def merge_pdfs(input_dir: Path, output_path: Path, margin_x: float, margin_y: float) -> int:
+    from pypdf import PdfReader, PdfWriter
+
     pdfs = collect_pdfs(input_dir)
     if not pdfs:
         raise SystemExit(f"no PDFs found under {input_dir}")

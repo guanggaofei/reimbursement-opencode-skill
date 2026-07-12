@@ -19,11 +19,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt
 from docx.oxml.ns import qn
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import DEFAULT_MATCH_RECORD, image_paths, invoice_key, load_match_record
 
 
-DEFAULT_OUTPUT = Path("支付记录/xxx_17-24_支付记录.docx")
+DEFAULT_OUTPUT = INTERNAL_DIR / "支付记录/xxx_17-24_支付记录.docx"
 DEFAULT_TITLE = "xxx 17-24 支付记录"
 DEFAULT_WIDTH_CM = 4.0
 DEFAULT_ERRORS = Path("invoice_errors.json")
@@ -129,7 +129,7 @@ def auto_collect_groups_from_record(errors_path: Path, results_path: Path, match
         groups.append({
             "title": f"xxx {idx_text} 支付记录",
             "images": sorted(images),
-            "output": root / "支付记录" / f"xxx_{idx_text}_支付记录.docx",
+            "output": root / INTERNAL_DIR / "支付记录" / f"xxx_{idx_text}_支付记录.docx",
         })
     return groups
 

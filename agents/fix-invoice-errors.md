@@ -1,6 +1,6 @@
 ---
 
-description: 修复 invoice_errors_raw.json 中列出的发票字段错误，从 PDF 提取正确值
+description: 修复 报销工作文件/invoice_errors_raw.json 中列出的发票字段错误，从 PDF 提取正确值
 mode: subagent
 permission:
   read: allow
@@ -13,7 +13,7 @@ permission:
 
 ## 错误位置
 
-从 `invoice_errors_raw.json` 读取错误列表。该文件由 `check_invoice_errors.py` 生成，格式如下：
+从 `报销工作文件/invoice_errors_raw.json` 读取错误列表。该文件由 `check_invoice_errors.py` 生成，格式如下：
 
 ```json
 {
@@ -33,10 +33,10 @@ permission:
 ## 修复要求
 
 ### 范围限制
-- **只修正 `invoice_errors_raw.json` 的 `errors[]` 中列出的字段**。其他任何字段（包括非 ERROR 的 `项目名称`、`价税合计金额`、`销售方名称`、`发票号码`、`开票时间` 等）一律不碰。
+- **只修正 `报销工作文件/invoice_errors_raw.json` 的 `errors[]` 中列出的字段**。其他任何字段（包括非 ERROR 的 `项目名称`、`价税合计金额`、`销售方名称`、`发票号码`、`开票时间` 等）一律不碰。
 - 不要添加、删除或修改 `项目列表` 中的条目总数，只修正 `单价` 的值。
 - 保持现有 JSON 结构，不要引入新键。
-- 如果 `invoice_errors_raw.json` 不存在、不是有效 JSON、`error_count` 为 0，或其中某个错误无法从 PDF/行程单可靠修复，立即停止并向主流程报告，不要猜测。
+- 如果 `报销工作文件/invoice_errors_raw.json` 不存在、不是有效 JSON、`error_count` 为 0，或其中某个错误无法从 PDF/行程单可靠修复，立即停止并向主流程报告，不要猜测。
 
 ### 从 PDF 提取正确值
 
@@ -53,7 +53,7 @@ pdftotext -layout invoices/<对应行程单文件名.pdf> -
 
 ### 输出
 
-将修正值**直接写入** `invoice_fixes.json`，以 `文件名` 为键：
+将修正值**直接写入** `报销工作文件/invoice_fixes.json`，以 `文件名` 为键：
 
 ```json
 {

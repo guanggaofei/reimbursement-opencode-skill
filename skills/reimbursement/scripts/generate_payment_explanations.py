@@ -22,7 +22,7 @@ from typing import Any
 from xml.dom import minidom
 from xml.sax.saxutils import escape
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import DEFAULT_MATCH_RECORD, invoice_key, load_match_record
 
 
@@ -43,8 +43,8 @@ def template_path(name: str) -> Path:
 DEFAULT_TEMPLATE = template_path("xxx_xxx_支付说明.docx")
 DEFAULT_ERRORS = Path("invoice_errors.json")
 DEFAULT_RESULTS = Path("invoice_results_sorted.json")
-DEFAULT_OUTPUT_DIR = Path("支付说明")
-DEFAULT_UNPACK_DIR = Path("支付说明/docx_unpacked")
+DEFAULT_OUTPUT_DIR = INTERNAL_DIR / "支付说明"
+DEFAULT_UNPACK_DIR = INTERNAL_DIR / "支付说明/docx_unpacked"
 
 DEFAULT_REASON = "淘宝购买，该公司收款方名为"
 SELLER_PAYEE_MAP = {
@@ -553,9 +553,12 @@ def main() -> int:
             }
         )
 
-    if not args.no_unpack:
+    if generated_docs and not args.no_unpack:
         refresh_unpack(args.template, generated_docs, args.unpack_dir)
-    write_report(args.report, generated_report)
+    if generated_report or skipped_groups:
+        write_report(args.report, generated_report)
+    elif args.report.exists():
+        args.report.unlink()
 
     for item in generated_report:
         print(f"generated {item['path']} amount={money_text(item['amount'])} content={item['content']}")

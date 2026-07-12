@@ -12,6 +12,9 @@ import argparse
 from pathlib import Path
 
 
+INTERNAL_DIR = Path("报销工作文件")
+
+
 def resolve_path(root: Path, user_path: Path) -> Path:
     """Resolve ``user_path`` against ``root``, honouring absolute paths."""
     if user_path.is_absolute():

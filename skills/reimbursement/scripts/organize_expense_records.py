@@ -60,7 +60,7 @@ from typing import Iterable
 import pdfplumber
 from rapidocr_onnxruntime import RapidOCR
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import (
     DEFAULT_MATCH_RECORD,
     add_match,
@@ -597,12 +597,13 @@ def unmatched_invoices(matches: list[ImageMatch], invoices: list[Invoice]) -> li
     return [inv for inv in invoices if inv.seq not in matched_seq]
 
 
-AI_REPORT_NAME = "支出记录OCR匹配明细.md"
-HUMAN_REPORT_NAME = "支出记录OCR整理结果.md"
+AI_REPORT_PATH = INTERNAL_DIR / "支出记录OCR匹配明细.md"
+HUMAN_REPORT_PATH = Path("支出记录OCR整理结果.md")
 
 def write_ai_report(matches: list[ImageMatch], root: Path, applied: bool) -> None:
     """Pending-only screenshot list — for AI/人工 diagnosis."""
-    path = root / AI_REPORT_NAME
+    path = root / AI_REPORT_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = [
         "# 支出记录 OCR 待处理截图明细",
         "",
@@ -625,7 +626,7 @@ def write_ai_report(matches: list[ImageMatch], root: Path, applied: bool) -> Non
 
 def write_human_report(matches: list[ImageMatch], invoices: list[Invoice], all_trip_entries: list[TripEntry], root: Path, applied: bool) -> None:
     """Summary tables for human review."""
-    path = root / HUMAN_REPORT_NAME
+    path = root / HUMAN_REPORT_PATH
     missing_invoices = unmatched_invoices(matches, invoices)
     lines: list[str] = [
         "# 支出记录 OCR 整理结果",
@@ -736,8 +737,8 @@ def parse_args() -> argparse.Namespace:
 def clean_previous_outputs(root: Path) -> None:
     """Remove stale OCR outputs before a normal run."""
     removed: list[str] = []
-    for name in (HUMAN_REPORT_NAME, AI_REPORT_NAME):
-        p = root / name
+    for relative_path in (HUMAN_REPORT_PATH, AI_REPORT_PATH):
+        p = root / relative_path
         if p.exists():
             p.unlink()
             removed.append(str(p))

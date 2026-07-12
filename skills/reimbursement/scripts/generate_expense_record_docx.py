@@ -14,7 +14,7 @@ from pathlib import Path
 from lxml import etree
 from PIL import Image
 
-from _pathutil import add_root_arg, resolve_path
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import DEFAULT_MATCH_RECORD, image_paths, invoice_images, invoice_key, load_match_record
 
 
@@ -421,6 +421,7 @@ def generate(args: argparse.Namespace) -> None:
     lines.extend(f"- {order}" for order in empty_rows)
     lines.extend(["", "## 跳过文件"])
     lines.extend(f"- {item}" for item in skipped)
+    report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"output={output}")
@@ -436,7 +437,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--invoice-json", default="invoice_results_sorted.json")
     parser.add_argument("--picture-template", default=DEFAULT_TEMPLATE)
     parser.add_argument("--output", default="Hello World 2026支出记录填写结果.docx")
-    parser.add_argument("--report", default="支出记录DOCX生成结果.md")
+    parser.add_argument("--report", default=INTERNAL_DIR / "支出记录DOCX生成结果.md")
     return parser.parse_args()
 
 

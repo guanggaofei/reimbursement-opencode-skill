@@ -27,9 +27,11 @@ Sanity checks:
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
+
+from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 
 
 def _resolve(target: dict, path: str):
@@ -77,13 +79,18 @@ def _check(result: dict, fixes: dict) -> int:
 
 
 def main() -> None:
-    root = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--root" else Path(".")
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_root_arg(parser)
+    parser.add_argument("--results", type=Path, default=Path("invoice_results.json"))
+    parser.add_argument("--fixes", type=Path, default=INTERNAL_DIR / "invoice_fixes.json")
+    args = parser.parse_args()
+    root = args.root.resolve()
 
-    results_path = root / "invoice_results.json"
-    fixes_path = root / "invoice_fixes.json"
+    results_path = resolve_path(root, args.results)
+    fixes_path = resolve_path(root, args.fixes)
 
     if not fixes_path.exists():
-        print("invoice_fixes.json not found, nothing to apply")
+        print(f"{fixes_path} not found, nothing to apply")
         return
 
     with open(results_path) as f:
