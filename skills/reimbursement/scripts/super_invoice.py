@@ -62,6 +62,11 @@ def is_valid_invoice_number(num: str) -> bool:
         return False
     return num.isdigit() and len(num) in (8, 20)
 
+
+def compact_whitespace(value: Any) -> str:
+    """Remove OCR-inserted whitespace before comparing identifiers."""
+    return re.sub(r"\s+", "", str(value or ""))
+
 def is_transport_fee(invoice: Dict) -> bool:
     """判断是否为打车费：发票名称含打车 or 项目名含运输"""
     file_name = invoice.get("文件名", "").lower()
@@ -821,7 +826,10 @@ def check_invoice_errors(sorted_invoices: List[Dict], allowed_buyers: List[Dict]
     }
 
     # -------------------------- 检查1：抬头和税号是否匹配允许列表 --------------------------
-    allowed_buyer_map = {(b["名称"].strip(), b["税号"].strip()): b for b in allowed_buyers}
+    allowed_buyer_map = {
+        (compact_whitespace(b["名称"]), compact_whitespace(b["税号"])): b
+        for b in allowed_buyers
+    }
     for invoice in sorted_invoices:
         buyer_name = invoice["购买方名称"].strip()
         buyer_tax = invoice["购买方税号"].strip()
@@ -829,7 +837,8 @@ def check_invoice_errors(sorted_invoices: List[Dict], allowed_buyers: List[Dict]
         if buyer_name == "ERROR" or buyer_tax == "ERROR":
             continue
         # 检查是否在允许列表中
-        if (buyer_name, buyer_tax) not in allowed_buyer_map:
+        buyer_key = (compact_whitespace(buyer_name), compact_whitespace(buyer_tax))
+        if buyer_key not in allowed_buyer_map:
             errors["抬头税号错误"].append({
                 "发票序号": invoice["发票序号"],
                 "文件名": invoice["文件名"],
