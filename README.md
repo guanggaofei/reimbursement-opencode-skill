@@ -4,6 +4,17 @@
 
 ## 安装
 
+### Agent 安装要求
+
+- Agent 获取本仓库时，必须将 Git 仓库克隆到 `/tmp/reimbursement-opencode-skill`，不得克隆到用户的报销项目目录或其他长期保存目录：
+
+  ```bash
+  git clone https://github.com/guanggaofei/reimbursement-opencode-skill.git /tmp/reimbursement-opencode-skill
+  ```
+
+- `/tmp/reimbursement-opencode-skill` 仅作为安装源；skill 和 subagent 仍应复制到用户报销项目的 `.opencode/` 目录。
+- 安装完成后，Agent 必须明确告知用户：**重启 opencode，并开启一个新会话，以加载新安装的 skill。** 仅在当前会话中继续操作不能保证新 skill 已被加载。
+
 当前工作目录应为报销项目根目录。
 
 Linux/macOS：
