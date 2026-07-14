@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 import tempfile
 import unittest
@@ -16,7 +17,19 @@ sys.path.insert(0, str(SCRIPTS))
 from _pathutil import INTERNAL_DIR, resolve_path  # noqa: E402
 from apply_match_actions import ActionError, slot_counts, validate_unique_slots  # noqa: E402
 from generate_reimbursement_xlsx import build_rows, first_item_quantity  # noqa: E402
-from merge_output_pdfs import collect_pdfs  # noqa: E402
+from merge_output_pdfs import (  # noqa: E402
+    A4_HEIGHT,
+    A4_WIDTH,
+    SIGNATURE_LINE_LENGTH,
+    center_page_on_a4,
+    collect_pdfs,
+    invoice_header_overlay,
+    invoice_sequence,
+)
+from verify_screenshot_coverage import build_issue_summary  # noqa: E402
+
+from pypdf._page import PageObject  # noqa: E402
+from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject, RectangleObject  # noqa: E402
 
 
 class PathLayoutTests(unittest.TestCase):
@@ -143,6 +156,85 @@ class MatchActionValidationTests(unittest.TestCase):
 
         with self.assertRaises(ActionError):
             validate_unique_slots(record, {"agent": "fix-trip-ambiguity"}, existing_counts)
+
+
+class ScreenshotIssueSummaryTests(unittest.TestCase):
+    def test_issue_summary_counts_repeatable_categories(self) -> None:
+        record = {
+            "未匹配截图": [
+                {"原因": "金额对应多个候选发票，交由后处理视觉识别"},
+                {"原因": "金额对应多个候选行程，交由后处理视觉识别"},
+                {"原因": "与截图 x.png 同时匹配同一发票，需人工识别"},
+                {"原因": "金额不匹配任何发票或打车行程"},
+            ]
+        }
+
+        summary = build_issue_summary(record, [object()], [(object(), "支付记录")], [object()])  # type: ignore[list-item]
+
+        self.assertEqual(summary["店铺名称歧义"], 1)
+        self.assertEqual(summary["行程歧义"], 1)
+        self.assertEqual(summary["重复截图"], 1)
+        self.assertEqual(summary["完全无截图发票"], 1)
+        self.assertEqual(summary["截图不完整发票"], 1)
+        self.assertEqual(summary["缺失行程截图"], 1)
+        self.assertEqual(summary["未匹配截图总数"], 4)
+
+
+class MergedPdfLayoutTests(unittest.TestCase):
+    def test_invoice_sequence_excludes_trip_sheet(self) -> None:
+        self.assertEqual(invoice_sequence(Path("47_价税合计_25_00_发票.pdf")), 47)
+        self.assertIsNone(invoice_sequence(Path("47_价税合计_25_00_行程单.pdf")))
+
+    def test_header_has_sequence_and_two_three_centimeter_lines(self) -> None:
+        overlay = invoice_header_overlay(47, 700)
+        operations = overlay.get_contents().operations
+        line_lengths = []
+        markers = []
+        for index, (operands, operator) in enumerate(operations):
+            if operator == b"m" and index + 1 < len(operations) and operations[index + 1][1] == b"l":
+                next_operands = operations[index + 1][0]
+                line_lengths.append(math.hypot(
+                    float(next_operands[0]) - float(operands[0]),
+                    float(next_operands[1]) - float(operands[1]),
+                ))
+            if operator == b"Tj":
+                markers.append(str(operands[0]))
+
+        self.assertEqual(markers, ["47"])
+        self.assertEqual(len(line_lengths), 2)
+        for length in line_lengths:
+            self.assertAlmostEqual(length, SIGNATURE_LINE_LENGTH, places=5)
+
+    def test_cropbox_and_annotations_are_transformed_together(self) -> None:
+        source = PageObject.create_blank_page(width=600, height=800)
+        source.cropbox = RectangleObject((0, 400, 600, 800))
+        annotation = DictionaryObject({
+            NameObject("/Subtype"): NameObject("/Square"),
+            NameObject("/Rect"): RectangleObject((100, 500, 200, 600)),
+            NameObject("/Path"): ArrayObject([
+                ArrayObject(FloatObject(value) for value in (50, 450, 150, 550)),
+            ]),
+        })
+        source[NameObject("/Annots")] = ArrayObject([annotation])
+
+        target, content_top = center_page_on_a4(source, margin_x=0, margin_y=72)
+        scale = min(A4_WIDTH / 600, (A4_HEIGHT - 144) / 400)
+        target_x = (A4_WIDTH - 600 * scale) / 2
+        target_y = (A4_HEIGHT - 400 * scale) / 2
+        rect = target["/Annots"][0].get_object()["/Rect"]
+
+        self.assertAlmostEqual(float(target.mediabox.width), A4_WIDTH, places=5)
+        self.assertAlmostEqual(float(target.mediabox.height), A4_HEIGHT, places=5)
+        self.assertAlmostEqual(content_top, target_y + 400 * scale, places=5)
+        self.assertAlmostEqual(float(rect[0]), 100 * scale + target_x, places=5)
+        self.assertAlmostEqual(float(rect[1]), (500 - 400) * scale + target_y, places=5)
+        self.assertAlmostEqual(float(rect[2]), 200 * scale + target_x, places=5)
+        self.assertAlmostEqual(float(rect[3]), (600 - 400) * scale + target_y, places=5)
+        path = target["/Annots"][0].get_object()["/Path"][0]
+        self.assertAlmostEqual(float(path[0]), 50 * scale + target_x, places=5)
+        self.assertAlmostEqual(float(path[1]), (450 - 400) * scale + target_y, places=5)
+        self.assertAlmostEqual(float(path[2]), 150 * scale + target_x, places=5)
+        self.assertAlmostEqual(float(path[3]), (550 - 400) * scale + target_y, places=5)
 
 
 if __name__ == "__main__":

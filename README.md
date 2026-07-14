@@ -1,6 +1,6 @@
 # 报销材料自动整理 Skill
 
-本仓库提供 Linux/macOS 与 Windows 两套 opencode 入口，用于自动整理发票 PDF、行程单和费用截图，并生成报账单、支出记录、附件压缩包与合并 PDF。
+本仓库提供 Linux/macOS 与 Windows 两套 opencode 入口，用于自动整理发票 PDF、行程单和费用截图，并生成报账单、支出记录与合并 PDF。支付材料保留原始占位名称，由用户填写姓名后自行压缩。
 
 ## 安装
 
@@ -56,10 +56,12 @@ Copy-Item -Force agents\fix-invoice-errors.windows.md .opencode\agents\fix-invoi
 
 代理内部技术文件统一位于 `报销工作文件/`：
 
-- `invoice_errors_raw.json`、`invoice_fixes.json`、`行程单数据.json`
+- `invoice_errors_raw.json`、`invoice_fixes.json`、`行程单数据.json`、`截图问题统计.json`
 - `支出记录OCR匹配明细.md`、`支出记录DOCX生成结果.md`、`OCR缓存原文.md`
 - subagent action JSON
 - 未打包的 `支付记录/`、`支付说明/`
 - DOCX 解包、XML 调试文件和其他临时产物
 
 `super_invoice.py` 的输出契约保持不变：它仍在根目录写入三个 JSON，并写入根目录 `output/`；不复制、改名或迁移这些文件。
+
+合并 PDF 使用每页 CropBox 作为可见内容边界居中到 A4。每个发票页在标题上方标记发票序号并预留两条各 3 cm 的签名线；行程单页不添加标记。

@@ -20,6 +20,13 @@ from _pathutil import INTERNAL_DIR, add_root_arg, resolve_path
 from _matching_records import DEFAULT_MATCH_RECORD, invoice_images, invoice_key, load_match_record
 
 
+ISSUE_REASON_MARKERS = {
+    "店铺名称歧义": "金额对应多个候选发票",
+    "行程歧义": "金额对应多个候选行程",
+    "重复截图": "同时匹配同一发票",
+}
+
+
 @dataclass
 class Invoice:
     seq: int
@@ -162,6 +169,26 @@ def enrich_pending_from_cache(pending: list[dict[str, Any]], cache: dict[str, An
     return enriched
 
 
+def build_issue_summary(
+    record: dict[str, Any],
+    missing_all: list[Invoice],
+    incomplete: list[tuple[Invoice, str]],
+    missing_trip_screenshots: list[tuple[int, int, float, str, str]],
+) -> dict[str, int]:
+    pending = list(record.get("未匹配截图", []) or [])
+    summary = {
+        name: sum(marker in str(item.get("原因") or "") for item in pending)
+        for name, marker in ISSUE_REASON_MARKERS.items()
+    }
+    summary.update({
+        "完全无截图发票": len(missing_all),
+        "截图不完整发票": len(incomplete),
+        "缺失行程截图": len(missing_trip_screenshots),
+        "未匹配截图总数": len(pending),
+    })
+    return summary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_root_arg(parser)
@@ -170,6 +197,7 @@ def main() -> int:
     parser.add_argument("--match-record", type=Path, default=DEFAULT_MATCH_RECORD)
     parser.add_argument("--ocr-cache", type=Path, default=Path("OCR缓存.json"))
     parser.add_argument("--update-report", type=Path, nargs="?", const=Path("支出记录OCR整理结果.md"), help="写入 Markdown 报告文件")
+    parser.add_argument("--issue-summary-json", type=Path, help="写入机器可读的截图问题分类计数")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -215,10 +243,16 @@ def main() -> int:
 
     cache = read_json_if_exists(resolve_path(root, args.ocr_cache))
     pending = enrich_pending_from_cache(list(record.get("未匹配截图", []) or []), cache)
+    issue_summary = build_issue_summary(record, missing_all, incomplete, missing_trip_screenshots)
     report = build_report_md(missing_all, incomplete, missing_trip_screenshots, pending)
     if args.update_report:
         resolve_path(root, args.update_report).write_text(report, encoding="utf-8")
+    if args.issue_summary_json:
+        summary_path = resolve_path(root, args.issue_summary_json)
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(issue_summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(report)
+    print(f"issue_summary={json.dumps(issue_summary, ensure_ascii=False, sort_keys=True)}")
     return 1 if missing_all or incomplete or missing_trip_screenshots else 0
 
 

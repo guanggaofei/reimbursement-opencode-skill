@@ -42,6 +42,7 @@ description: "Trigger when the user indicates they are executing the reimburseme
 `报销工作文件/` 仅保存代理内部文件：
 
 - `invoice_errors_raw.json`、`invoice_fixes.json`、`行程单数据.json`
+- `截图问题统计.json`
 - `支出记录OCR匹配明细.md`、`支出记录DOCX生成结果.md`、`OCR缓存原文.md`
 - 所有 subagent action JSON
 - `支付记录/`、`支付说明/` 及其中的 DOCX
@@ -115,17 +116,31 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 - 根目录 `OCR缓存.json`、`匹配记录.json`、`支出记录OCR整理结果.md`
 - `报销工作文件/支出记录OCR匹配明细.md`
 
-新增少量截图时也由用户按上述方式运行单行命令，并在末尾添加 `--scan-only`。对于金额歧义、行程歧义、重复截图和无截图发票，分别调用对应 subagent。每个 subagent 将 action JSON 写入 `报销工作文件/`，再用：
+新增少量截图时也由用户按上述方式运行单行命令，并在末尾添加 `--scan-only`。
+
+截图匹配 subagent 必须视觉识别优先：OCR 只用于定位候选，最终归属必须由 subagent 使用 Read 直接查看原始截图后，根据可见的店铺、商品、服务商、时间、路线或订单号判断。除 `fix-bearing-invoice` 中明确要求的纯金额组合计算外，禁止 subagent 使用 Python、自动相似度或自编脚本决定归属。subagent 只写 action JSON，不自行应用；由主流程统一执行：
 
 ```bash
 .venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/<agent-name>.actions.json
 ```
 
-运行覆盖率检查并刷新根目录用户报告：
+先运行覆盖率检查，刷新用户报告并生成机器可读的分类计数：
 
 ```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --root . --update-report
+.venv/bin/python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --root . --update-report --issue-summary-json 报销工作文件/截图问题统计.json
 ```
+
+按“店铺名称歧义 → 行程歧义 → 重复截图”的顺序处理，禁止并行写 action。三类问题分别执行独立的收敛循环：
+
+| 计数键 | subagent | action 文件 |
+| --- | --- | --- |
+| `店铺名称歧义` | `@fix-shop-name-ambiguity` | `报销工作文件/fix-shop-name-ambiguity.actions.json` |
+| `行程歧义` | `@fix-trip-ambiguity` | `报销工作文件/fix-trip-ambiguity.actions.json` |
+| `重复截图` | `@fix-duplicate-screenshots` | `报销工作文件/fix-duplicate-screenshots.actions.json` |
+
+每一类型最多处理 3 轮。每轮读取 `截图问题统计.json` 中该类型的轮前数量，只把当前仍未解决的条目交给一个新的同类型 subagent；应用其 action 后重新运行覆盖率检查并读取轮后数量。轮后数量下降且仍大于 0 时继续下一轮；降为 0 时完成；数量未下降、subagent 无可靠 action 或达到 3 轮时立即停止该类型并报告残留，不得反复空跑。
+
+`@fix-bearing-invoice` 只处理“完全无截图发票”，在上述三类循环之后最多调用一次，不执行收敛重试。应用其 action 后最后再运行一次覆盖率检查并刷新报告与分类计数。
 
 将仍在 `匹配记录.json` 的 `未匹配截图[]` 中的原图复制到根目录 `待审核截图/`，不移动或改名原图。
 
@@ -157,7 +172,7 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 - 打车发票必须精确到行程序号，并列出该行程缺少的截图位置。
 - 对每个缺失位置，列出 `匹配记录.json` 中原因明确指向该发票或行程的候选截图原路径，如 `images/IMG_1234.png`；没有可靠候选时明确写“未找到候选截图”，不得仅凭相同金额猜测。
 - 另列出仍在 `未匹配截图[]` 中的每张截图原路径和原因，确保用户能精确定位需要核对的图片。
-- 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续打包流程，除非用户要求暂停。
+- 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续合并流程，除非用户要求暂停。
 
 ### 7. 合并 PDF
 
@@ -167,8 +182,8 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 
 不自动生成 ZIP。`报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 可能仍含 `xxx` 占位名称，用户填写姓名并按需改名后自行压缩；`output/4_辰景发票/` 中的 PDF 也由用户确认后自行压缩。
 
-`merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`，生成根目录 `合并发票_纵向居中.pdf`。
+`merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`，以每页 CropBox 作为可见内容边界居中到 A4，生成根目录 `合并发票_纵向居中.pdf`。每个发票 PDF 的每一页均在标题正上方标记该发票序号，并添加两条各 3 cm 的签名线；同一张多页发票使用相同序号，行程单页不添加标记。
 
 ### 8. 验证
 
-确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。
+确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认合并 PDF 全部为 A4，所有发票页均带正确序号和两条 3 cm 签名线、所有行程单页均无标记，并重点渲染检查原始 CropBox 异常页。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。

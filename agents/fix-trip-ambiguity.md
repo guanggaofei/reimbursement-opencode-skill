@@ -4,7 +4,7 @@ mode: subagent
 permission:
   read: allow
   grep: allow
-  bash: allow
+  bash: deny
   edit: allow
   write: allow
   glob: allow
@@ -12,10 +12,11 @@ permission:
 
 当一张截图的 OCR 金额匹配多个行程明细行时，通过比较 OCR 字段与行程单数据来消除歧义。
 
-## 运行环境
+## 识别方式
 
-- 所有命令都从项目根目录运行。
-- Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+- 禁止使用 Python、Bash、自动相似度、正则打分或自编脚本决定截图归属。
+- `OCR缓存.json` 只用于定位候选；必须使用 Read 直接查看每张原始截图，再与行程单中的服务商、乘车时间、车型和路线逐项比较。
+- 每条 action 的 `reason` 必须写出至少一个从原图直接看到的区分依据。无法直接识别时保留未匹配，不猜测。
 
 ## 数据来源
 
@@ -34,7 +35,7 @@ permission:
    - 支付记录：提取 OCR 原文中的乘车时间。
    - 账单截图：提取 OCR 原文中的服务商、车型、路线/地点。
 3. 从 `报销工作文件/行程单数据.json` 查同金额候选行程：服务商、车型、上车时间、起点终点。
-4. 由你自行交叉判断：
+4. 使用 Read 逐张打开原图，由你自行交叉判断图中可见信息：
    - 账单截图服务商 ≈ 行程单服务商，是主要依据。
    - 支付记录乘车时间 ≈ 行程单上车时间，通常 15 分钟内。
    - 路线信息仅作兜底。
@@ -67,7 +68,7 @@ permission:
       "slot": "支付记录",
       "image": "images/IMG_2615.PNG",
       "purchase_date": "2026/7/7",
-      "reason": "OCR 乘车时间与行程单上车时间匹配"
+      "reason": "原图可见 2026-07-07 10:15 乘车时间，与行程单上车时间一致"
     }
   ]
 }
@@ -79,21 +80,7 @@ permission:
 - 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 - 不要在 action 中写入金额、打车平台、服务商、车型、上车时间、更新后文件名或发票序号等可从其它文件重算的字段。
 
-写完 action 文件后运行：
-
-Linux/macOS：
-
-```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-trip-ambiguity.actions.json
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-trip-ambiguity.actions.json
-```
-
-如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
+写完 action 文件后停止。不要自行应用 action；主流程负责调用应用脚本。不要直接修补 `匹配记录.json`。
 
 ## 输出
 

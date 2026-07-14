@@ -4,7 +4,7 @@ mode: subagent
 permission:
   read: allow
   grep: allow
-  bash: allow
+  bash: deny
   edit: allow
   write: allow
   glob: allow
@@ -12,10 +12,11 @@ permission:
 
 当一张截图的 OCR 金额匹配多张发票时，通过比较 OCR 文本中的店铺名称与发票销售方名称来消除歧义。
 
-## 运行环境
+## 识别方式
 
-- 所有命令都从项目根目录运行。
-- Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+- 禁止使用 Python、Bash、自动相似度、正则打分或自编脚本决定截图归属。
+- `OCR缓存.json` 只用于定位候选；必须使用 Read 直接查看每张原始截图，并依靠图中可见的店铺、商品、时间和订单信息作结论。
+- 每条 action 的 `reason` 必须写出至少一个从原图直接看到的区分依据。无法直接识别时保留未匹配，不猜测。
 
 ## 数据来源
 
@@ -30,7 +31,7 @@ permission:
 1. 在 `报销工作文件/支出记录OCR匹配明细.md` 中查找 `金额对应多个候选发票`，确定待处理图片和候选发票。
 2. 对每张待处理图片，用原始路径 `images/<图片名>` 读取 `OCR缓存.json` 中的 OCR 原文、金额、类型和支付日期。
 3. 在 `invoice_results_sorted.json` 中按 `文件名` 字段定位候选条目，提取 `销售方名称`、`项目列表`。不要用 `更新后文件名` 或序号定位。
-4. 由你自行比较店铺名称和商品描述：
+4. 使用 Read 逐张打开原图，由你自行比较图中可见的店铺名称和商品描述：
    - 支付记录通常有带 `**` 的收款方提示，如 `鸿康**店`。
    - 账单截图通常包含完整店铺名称，如 `鸿康明五金旗舰店`。
    - 发票销售方名称来自 `销售方名称` 字段。
@@ -63,7 +64,7 @@ permission:
       "slot": "支付记录",
       "image": "images/IMG_2707.PNG",
       "purchase_date": "2026/7/7",
-      "reason": "OCR 店铺核心词匹配发票销售方"
+      "reason": "原图可见鸿康明五金旗舰店，与发票销售方核心词一致"
     }
   ]
 }
@@ -75,21 +76,7 @@ permission:
 - 所有发票路径必须使用 `invoices/<invoice_results_sorted.json 的 文件名 字段值>`，截图路径使用 `images/<原截图文件名>`。
 - 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
 
-写完 action 文件后运行：
-
-Linux/macOS：
-
-```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-shop-name-ambiguity.actions.json
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-shop-name-ambiguity.actions.json
-```
-
-如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
+写完 action 文件后停止。不要自行应用 action；主流程负责调用应用脚本。不要直接修补 `匹配记录.json`。
 
 ## 输出
 

@@ -4,7 +4,10 @@ mode: subagent
 permission:
   read: allow
   grep: allow
-  bash: allow
+  bash:
+    "*": deny
+    ".venv/bin/python -c *": allow
+    '.\.venv\Scripts\python.exe -c *': allow
   edit: allow
   write: allow
   glob: allow
@@ -16,6 +19,10 @@ permission:
 
 - 所有命令都从项目根目录运行。
 - Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+- 除第 5 步明确要求的纯金额组合计算外，禁止使用 Python、自动相似度、正则打分或自编脚本决定截图归属。
+- Bash 权限只开放虚拟环境解释器的 `-c` 调用，并且只能用于第 5 步的金额组合计算；不得借此读取、筛选或匹配候选图片。
+- `OCR缓存.json` 只用于检索候选。进入金额组合前，必须使用 Read 直接查看每张原始截图，并先依据图中可见的店铺或商品确认归属；Python 计算结果本身不能作为归属证据。
+- 每条 action 的 `reason` 必须包含从原图直接看到的店铺或商品依据。
 
 ## 输入
 
@@ -47,14 +54,14 @@ permission:
 4. 记录候选图片的金额、`kind`、OCR 文本。
 
 ### 第 4 步：人工归属判断
-由你自行判断候选图片属于哪张发票：
+使用 Read 逐张打开候选原图，再自行判断候选图片属于哪张发票：
 - 店铺名称是否与销售方匹配。
 - 商品描述与发票项目的匹配程度。
 - 排除店铺名称明显不符的图片。
 
 ### 第 5 步：金额组合验证
 1. 对每张发票，将归属的图片按 `kind` 分组。
-2. 用 Python 做组合搜索，寻找和接近发票金额的组合。
+2. 只有完成视觉归属后，才可用 Python 对已确认属于该发票的金额做组合搜索；不得把其他候选交给 Python 决定归属。
 3. 价格容差：组合金额与发票金额差距在 ±10% 以内算通过。
 4. 优先找偏差最小的组合。
 5. 支付记录和账单截图数量不必强制一致，能匹配多少先写多少；缺失项在最终报告说明。
@@ -78,7 +85,7 @@ permission:
       "image": "images/IMG_2680.PNG",
       "purchase_date": "2026/7/7",
       "exception_reason": "该发票由多笔支付组成，需要多张支付记录共同证明",
-      "reason": "OCR 商品关键词和金额组合匹配"
+      "reason": "原图可见绿林工具旗舰店和钳子商品，金额组合接近发票总额"
     }
   ]
 }
@@ -90,21 +97,7 @@ permission:
 - 若同一发票同类型需要多张截图，必须设置顶层 `allow_multiple_same_slot: true`，并在每条相关 action 中写明 `exception_reason`。
 - 不要在 action 中写入金额、类型、销售方、更新后文件名或发票序号等可从其它文件重算的字段。
 
-写完 action 文件后运行：
-
-Linux/macOS：
-
-```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-bearing-invoice.actions.json
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-bearing-invoice.actions.json
-```
-
-如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
+写完 action 文件后停止。不要自行应用 action；主流程负责调用应用脚本。不要直接修补 `匹配记录.json`。
 
 ## 最终报告
 

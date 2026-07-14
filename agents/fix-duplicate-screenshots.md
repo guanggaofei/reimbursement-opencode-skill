@@ -4,7 +4,7 @@ mode: subagent
 permission:
   read: allow
   grep: allow
-  bash: allow
+  bash: deny
   edit: allow
   write: allow
   glob: allow
@@ -12,10 +12,11 @@ permission:
 
 当多张截图匹配同一张发票时，首先检查它们是否是同一笔交易的重复截图。
 
-## 运行环境
+## 识别方式
 
-- 所有命令都从项目根目录运行。
-- Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+- 禁止使用 Python、Bash、图片哈希、自动相似度、正则打分或自编脚本决定截图归属或质量。
+- `OCR缓存.json` 只用于定位候选；必须使用 Read 直接查看每张原始截图，比较可见的店铺、服务商、金额、时间、商品、订单号和清晰度。
+- 每条 action 的 `reason` 必须写出从原图直接看到的重复依据或归属依据。无法直接判断时保留未匹配，不任意选择。
 
 ## 数据来源
 
@@ -30,7 +31,7 @@ permission:
 
 1. 按冲突发票/金额对图片分组。
 2. 对每张图片，从 `OCR缓存.json` 读取 OCR 文本。
-3. 由你自行比较店铺名称、金额、日期时间、商品描述、订单号，判断是否为同一笔交易。
+3. 使用 Read 逐张打开原图，由你自行比较图中可见的店铺名称、金额、日期时间、商品描述、订单号，判断是否为同一笔交易。
 4. 如果确认为重复：
    - 保留质量较好的图片（通常 `IMG_xxx.PNG` 优于 `Weixin Image_xxx.jpg` / `img_v3_xxx.jpg`）。
    - 通过 action 将保留图片分配到对应位置。
@@ -65,7 +66,7 @@ permission:
       "image": "images/IMG_2707.PNG",
       "replace": "images/Weixin Image_2707.jpg",
       "ignore_replaced": true,
-      "reason": "两张图是同一笔交易，保留 OCR 更清晰的截图"
+      "reason": "两张原图可见相同订单号和金额，保留文字更清晰的截图"
     }
   ]
 }
@@ -90,21 +91,7 @@ permission:
 
 不要在 action 中写入金额、类型、打车平台、服务商、车型、更新后文件名或发票序号等可从其它文件重算的字段。
 
-写完 action 文件后运行：
-
-Linux/macOS：
-
-```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-duplicate-screenshots.actions.json
-```
-
-Windows PowerShell：
-
-```powershell
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-duplicate-screenshots.actions.json
-```
-
-如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。
+写完 action 文件后停止。不要自行应用 action；主流程负责调用应用脚本。不要直接修补 `匹配记录.json`。
 
 ## 输出
 
