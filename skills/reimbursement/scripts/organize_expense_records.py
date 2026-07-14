@@ -816,6 +816,7 @@ def main() -> int:
         ]
         update_match_record(new_matches, invoices, root, args.match_record)
         print_scan_report(new_matches, root)
+        print("OCR 处理完成。请回到 opencode，回复“运行完成”。")
         return 0
 
     if apply_changes:
@@ -823,6 +824,8 @@ def main() -> int:
 
     write_ai_report(matches, root, apply_changes)
     write_human_report(matches, invoices, all_trip_entries, root, apply_changes)
+
+    print("OCR 处理完成。请回到 opencode，回复“运行完成”。")
 
     return 0
 

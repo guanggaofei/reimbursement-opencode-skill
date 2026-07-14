@@ -88,16 +88,27 @@ python .opencode/skills/reimbursement/scripts/extract_trip_sheets.py --root .
 
 ### 5. OCR 与截图匹配
 
+OCR 可能耗时很长，禁止由代理直接运行 `organize_expense_records.py`，以免 opencode 超时终止进程。代理必须暂停流程，请用户在自己的终端中运行，并等待用户确认完成后再继续。
+
+面向不熟悉终端的用户时，按以下方式说明：
+
+1. 告诉用户按 `Ctrl+Alt+T` 打开终端；macOS 用户按 `Command+空格`，输入“终端”并打开。
+2. 根据当前项目根目录生成一条可直接复制的完整命令，路径必须替换为实际绝对路径，不得保留占位符：
+
 ```bash
-python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
+cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursement/scripts/organize_expense_records.py --root .
 ```
+
+3. 告诉用户把整行命令复制到终端，按回车后不要关闭终端，等待看到“OCR 处理完成”。
+4. 告诉用户完成后回到 opencode 回复“运行完成”。用户确认前不得继续后续步骤。
+5. 告诉用户如果运行意外中断，重新执行同一行命令即可；脚本会读取 `OCR缓存.json`，已识别的图片不需要重做。
 
 读取根目录输入、三个 JSON、`output/` 与稳定缓存，写入：
 
 - 根目录 `OCR缓存.json`、`匹配记录.json`、`支出记录OCR整理结果.md`
 - `报销工作文件/支出记录OCR匹配明细.md`
 
-新增少量截图时使用 `--scan-only`。对于金额歧义、行程歧义、重复截图和无截图发票，分别调用对应 subagent。每个 subagent 将 action JSON 写入 `报销工作文件/`，再用：
+新增少量截图时也由用户按上述方式运行单行命令，并在末尾添加 `--scan-only`。对于金额歧义、行程歧义、重复截图和无截图发票，分别调用对应 subagent。每个 subagent 将 action JSON 写入 `报销工作文件/`，再用：
 
 ```bash
 python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/<agent-name>.actions.json

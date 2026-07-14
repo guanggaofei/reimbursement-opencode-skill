@@ -54,8 +54,24 @@ Remove-Item -Force 'Hello World 2026报账单填写结果.xlsx', 'Hello World 20
 
 ```powershell
 .\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\extract_trip_sheets.py --root .
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\organize_expense_records.py --root .
 ```
+
+OCR 可能耗时很长，禁止由代理直接运行 `organize_expense_records.py`，以免 opencode 超时终止进程。代理必须暂停流程，请用户在自己的终端中运行，并等待用户确认完成后再继续。
+
+面向不熟悉终端的用户时，按以下方式说明：
+
+1. 告诉用户按 `Win+R`，输入 `powershell`，再按回车打开终端。
+2. 根据当前项目根目录生成一条可直接复制的完整命令，路径必须替换为实际绝对路径，不得保留占位符：
+
+```powershell
+Set-Location -LiteralPath 'C:\实际的项目根目录'; & .\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\organize_expense_records.py --root .
+```
+
+3. 告诉用户把整行命令复制到 PowerShell，按回车后不要关闭窗口，等待看到“OCR 处理完成”。
+4. 告诉用户完成后回到 opencode 回复“运行完成”。用户确认前不得继续后续步骤。
+5. 告诉用户如果运行意外中断，重新执行同一行命令即可；脚本会读取 `OCR缓存.json`，已识别的图片不需要重做。
+
+新增少量截图时也由用户运行同一条单行命令，并在末尾添加 `--scan-only`。
 
 行程 JSON 与 OCR 技术明细写入 `报销工作文件/`；缓存、匹配状态和 `支出记录OCR整理结果.md` 保留在根目录。subagent action JSON 写入 `报销工作文件/`，并通过下列命令合入：
 
