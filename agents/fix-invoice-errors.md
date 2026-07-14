@@ -11,6 +11,11 @@ permission:
   write: allow
 ---
 
+## 运行环境
+
+- 所有命令都从项目根目录运行。
+- 调用任何 Python 脚本时必须使用项目虚拟环境解释器 `.venv/bin/python`，禁止使用 `python` 或 `python3`。
+
 ## 错误位置
 
 从 `报销工作文件/invoice_errors_raw.json` 读取错误列表。该文件由 `check_invoice_errors.py` 生成，格式如下：

@@ -12,6 +12,11 @@ permission:
 
 当一张或多张发票完全没有已匹配的截图时，通过搜索 OCR 文本中的商品/店铺关键词来寻找未匹配截图，再用金额组合验证。
 
+## 运行环境
+
+- 所有命令都从项目根目录运行。
+- Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+
 ## 输入
 
 主流程传入要处理的稳定发票路径列表，如 `"invoices/example.pdf,invoices/example2.pdf"`，其中 `example.pdf` 必须来自 `invoice_results_sorted.json` 的 `文件名` 字段。序号和 `更新后文件名` 只能作为展示信息，不可作为状态索引。
@@ -87,8 +92,16 @@ permission:
 
 写完 action 文件后运行：
 
+Linux/macOS：
+
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-bearing-invoice.actions.json
+.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-bearing-invoice.actions.json
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-bearing-invoice.actions.json
 ```
 
 如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。

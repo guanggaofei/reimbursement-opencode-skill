@@ -12,6 +12,11 @@ permission:
 
 当多张截图匹配同一张发票时，首先检查它们是否是同一笔交易的重复截图。
 
+## 运行环境
+
+- 所有命令都从项目根目录运行。
+- Linux/macOS 调用 Python 脚本时使用 `.venv/bin/python`；Windows 使用 `.\.venv\Scripts\python.exe`。禁止使用系统 `python` 或 `python3`。
+
 ## 数据来源
 
 - `invoice_results_sorted.json` — 发票信息。只使用其中的 `文件名` 字段定位；在 `匹配记录.json` 中对应 key 为 `invoices/<文件名字段值>`。`更新后文件名` 和序号只可作为展示信息，不可作为状态索引。
@@ -87,8 +92,16 @@ permission:
 
 写完 action 文件后运行：
 
+Linux/macOS：
+
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-duplicate-screenshots.actions.json
+.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/fix-duplicate-screenshots.actions.json
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\apply_match_actions.py --root . --actions 报销工作文件\fix-duplicate-screenshots.actions.json
 ```
 
 如果脚本返回 `ERROR` 或非零退出码，不要自行修补 `匹配记录.json`；把错误信息报告给主流程。

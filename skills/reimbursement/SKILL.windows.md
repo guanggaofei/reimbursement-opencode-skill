@@ -15,6 +15,18 @@ description: "Trigger when the user indicates they are executing the reimburseme
 4. 不复制、改名或迁移 `super_invoice.py` 生成的三个 JSON 与 `output/`。
 5. 安装 Python 包前列出包名、原因和完整命令，并等待用户批准。
 
+## 环境
+
+使用项目 `.venv`。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext`。
+
+缺少 Python 包时，先向用户列出缺少的包、用途和完整安装命令并等待批准。完整环境安装命令为：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install pdfplumber rapidocr-onnxruntime onnxruntime Pillow pypinyin pypdf python-docx lxml
+```
+
+只缺少部分包时仅安装缺少项，不重复安装全部依赖。所有 Python 脚本必须通过 `.\.venv\Scripts\python.exe` 调用，禁止使用系统 `python` 或 `python3`。
+
 ## 文件布局
 
 根目录保存 `invoices/`、`images/`、`output/`、三个发票 JSON、`OCR缓存.json`、`匹配记录.json`、历史报账单、`支出记录OCR整理结果.md`、`待审核截图/`、两份最终 Office 文件、可选 ZIP、可选支付说明报告和合并 PDF。
@@ -92,6 +104,14 @@ Set-Location -LiteralPath 'C:\实际的项目根目录'; & .\.venv\Scripts\pytho
 ```
 
 最终 DOCX/XLSX 和需要保留的支付说明报告位于根目录；支付记录、支付说明、DOCX 技术报告及解包调试文件位于 `报销工作文件/`。
+
+上述 DOCX 与 XLSX 命令完成后、进入步骤 5 前，必须立即读取最新的 `支出记录OCR整理结果.md` 和 `匹配记录.json`，向用户告知截图匹配缺口：
+
+- 逐张列出完全未匹配或截图不完整的发票，包括 `invoices/<原发票文件名>`、输出中的发票文件名、金额和缺失位置（`支付记录` 或 `账单截图`）。
+- 打车发票必须精确到行程序号，并列出该行程缺少的截图位置。
+- 对每个缺失位置，列出 `匹配记录.json` 中原因明确指向该发票或行程的候选截图原路径，如 `images/IMG_1234.png`；没有可靠候选时明确写“未找到候选截图”，不得仅凭相同金额猜测。
+- 另列出仍在 `未匹配截图[]` 中的每张截图原路径和原因，确保用户能精确定位需要核对的图片。
+- 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续打包流程，除非用户要求暂停。
 
 ### 5. 打包和合并
 

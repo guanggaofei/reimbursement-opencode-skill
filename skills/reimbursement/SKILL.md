@@ -15,7 +15,15 @@ description: "Trigger when the user indicates they are executing the reimburseme
 
 ## 环境
 
-使用项目 `.venv`。安装 Python 包前必须列出包名、原因和完整命令，并等待用户批准。所需能力包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext`。
+使用项目 `.venv`。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext`。
+
+缺少 Python 包时，先向用户列出缺少的包、用途和完整安装命令并等待批准。完整环境安装命令为：
+
+```bash
+.venv/bin/python -m pip install pdfplumber rapidocr-onnxruntime onnxruntime Pillow pypinyin pypdf python-docx lxml
+```
+
+只缺少部分包时仅安装缺少项，不重复安装全部依赖。所有 Python 脚本必须通过 `.venv/bin/python` 调用，禁止使用系统 `python` 或 `python3`。
 
 ## 路径约定
 
@@ -59,21 +67,21 @@ rm -f 支付说明与支付记录.zip 辰景发票.zip 合并发票_纵向居中
 确认 `invoices/` 和 `images/` 存在，然后运行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/check_taxi_pairs.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/check_taxi_pairs.py --root .
 ```
 
 ### 3. 运行发票提取并修复字段
 
 ```bash
-python .opencode/skills/reimbursement/scripts/super_invoice.py --root .
-python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/super_invoice.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
 ```
 
 `check_invoice_errors.py` 写入 `报销工作文件/invoice_errors_raw.json`。若其中 `error_count > 0`，调用 `@fix-invoice-errors`；subagent 只读取该错误列表，并写入 `报销工作文件/invoice_fixes.json`。然后执行：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_invoice_fixes.py --root .
-python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/apply_invoice_fixes.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
 ```
 
 最多修复 3 轮；错误数不下降或字段无法可靠确定时停止。若根目录存在历史 `第x批报账单.xlsx`，运行 `cross_batch_dedup.py --root .`，然后重新执行本步骤。最终再次运行 `super_invoice.py --root .`，确认它仍只生成根目录 `invoice_results.json`、`invoice_results_sorted.json`、`invoice_errors.json` 和 `output/`。
@@ -81,7 +89,7 @@ python .opencode/skills/reimbursement/scripts/check_invoice_errors.py --root .
 ### 4. 提取行程数据
 
 ```bash
-python .opencode/skills/reimbursement/scripts/extract_trip_sheets.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/extract_trip_sheets.py --root .
 ```
 
 输出 `报销工作文件/行程单数据.json`。
@@ -111,13 +119,13 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 新增少量截图时也由用户按上述方式运行单行命令，并在末尾添加 `--scan-only`。对于金额歧义、行程歧义、重复截图和无截图发票，分别调用对应 subagent。每个 subagent 将 action JSON 写入 `报销工作文件/`，再用：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/<agent-name>.actions.json
+.venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/<agent-name>.actions.json
 ```
 
 运行覆盖率检查并刷新根目录用户报告：
 
 ```bash
-python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --root . --update-report
+.venv/bin/python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --root . --update-report
 ```
 
 将仍在 `匹配记录.json` 的 `未匹配截图[]` 中的原图复制到根目录 `待审核截图/`，不移动或改名原图。
@@ -125,10 +133,10 @@ python .opencode/skills/reimbursement/scripts/verify_screenshot_coverage.py --ro
 ### 6. 生成 DOCX 与 XLSX
 
 ```bash
-python .opencode/skills/reimbursement/scripts/generate_expense_record_docx.py --root .
-python .opencode/skills/reimbursement/scripts/generate_payment_record_docx.py --root .
-python .opencode/skills/reimbursement/scripts/generate_payment_explanations.py --root . --date YYYY-M-D
-python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/generate_expense_record_docx.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/generate_payment_record_docx.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/generate_payment_explanations.py --root . --date YYYY-M-D
+.venv/bin/python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --root .
 ```
 
 生成位置：
@@ -142,11 +150,19 @@ python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --r
 
 支付说明仅以 `invoice_errors.json` 中明确要求同时添加支付说明与支付记录的分组为入口。无法可靠确定收款方时停止该组，不猜测。
 
+上述 DOCX 与 XLSX 命令完成后、进入步骤 7 前，必须立即读取最新的 `支出记录OCR整理结果.md` 和 `匹配记录.json`，向用户告知截图匹配缺口：
+
+- 逐张列出完全未匹配或截图不完整的发票，包括 `invoices/<原发票文件名>`、输出中的发票文件名、金额和缺失位置（`支付记录` 或 `账单截图`）。
+- 打车发票必须精确到行程序号，并列出该行程缺少的截图位置。
+- 对每个缺失位置，列出 `匹配记录.json` 中原因明确指向该发票或行程的候选截图原路径，如 `images/IMG_1234.png`；没有可靠候选时明确写“未找到候选截图”，不得仅凭相同金额猜测。
+- 另列出仍在 `未匹配截图[]` 中的每张截图原路径和原因，确保用户能精确定位需要核对的图片。
+- 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续打包流程，除非用户要求暂停。
+
 ### 7. 打包与合并 PDF
 
 ```bash
-python .opencode/skills/reimbursement/scripts/package_final_outputs.py --root .
-python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/package_final_outputs.py --root .
+.venv/bin/python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
 ```
 
 `package_final_outputs.py`：

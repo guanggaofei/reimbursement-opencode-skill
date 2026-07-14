@@ -12,6 +12,7 @@ SCRIPTS = REPO_ROOT / "skills" / "reimbursement" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from _pathutil import INTERNAL_DIR, resolve_path  # noqa: E402
+from apply_match_actions import ActionError, slot_counts, validate_unique_slots  # noqa: E402
 from merge_output_pdfs import collect_pdfs  # noqa: E402
 from package_final_outputs import (  # noqa: E402
     CHENJING_ARCHIVE,
@@ -113,6 +114,38 @@ class PackagingTests(unittest.TestCase):
             self.assertFalse(package_chenjing_invoices(root, chenjing_zip))
             self.assertFalse(payment_zip.exists())
             self.assertFalse(chenjing_zip.exists())
+
+
+class MatchActionValidationTests(unittest.TestCase):
+    def test_existing_duplicate_slot_does_not_block_unrelated_action(self) -> None:
+        record = {
+            "发票映射": {
+                "invoices/example.pdf": {
+                    "支付记录": ["images/a.png", "images/b.png"],
+                    "账单截图": [],
+                    "行程明细": [],
+                }
+            }
+        }
+        existing_counts = slot_counts(record)
+
+        validate_unique_slots(record, {"agent": "fix-trip-ambiguity"}, existing_counts)
+
+    def test_new_duplicate_slot_is_rejected(self) -> None:
+        record = {
+            "发票映射": {
+                "invoices/example.pdf": {
+                    "支付记录": ["images/a.png"],
+                    "账单截图": [],
+                    "行程明细": [],
+                }
+            }
+        }
+        existing_counts = slot_counts(record)
+        record["发票映射"]["invoices/example.pdf"]["支付记录"].append("images/b.png")
+
+        with self.assertRaises(ActionError):
+            validate_unique_slots(record, {"agent": "fix-trip-ambiguity"}, existing_counts)
 
 
 if __name__ == "__main__":

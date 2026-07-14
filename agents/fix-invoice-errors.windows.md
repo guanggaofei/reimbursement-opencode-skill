@@ -12,6 +12,11 @@ permission:
 
 # 修复发票字段
 
+## 运行环境
+
+- 所有命令都从项目根目录运行。
+- 调用任何 Python 脚本时必须使用项目虚拟环境解释器 `.\.venv\Scripts\python.exe`，禁止使用系统 `python` 或 `python3`。
+
 读取 `报销工作文件/invoice_errors_raw.json`，只处理其 `errors[]` 中明确列出的字段。使用 `pdftotext -layout` 读取 `invoices/` 中对应发票；打车发票同时核对行程单。无法从原始文件可靠确定时停止，不猜测。
 
 不要添加、删除或重排 `项目列表` 条目，不修改错误列表之外的字段。

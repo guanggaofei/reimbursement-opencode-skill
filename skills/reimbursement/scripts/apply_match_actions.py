@@ -200,19 +200,33 @@ def apply_invoice_action(
     return assign_to_slot(record, entry, slot, image, action, multiple_allowed=multiple_allowed)
 
 
-def validate_unique_slots(record: dict[str, Any], payload: dict[str, Any]) -> None:
+def slot_counts(record: dict[str, Any]) -> dict[tuple[str, int, str], int]:
+    counts: dict[tuple[str, int, str], int] = {}
+    for invoice, entry in record.get("发票映射", {}).items():
+        for slot in SLOTS:
+            counts[(invoice, 0, slot)] = len(entry.get(slot) or [])
+        for trip in entry.get("行程明细", []) or []:
+            seq = int(trip.get("行程序号", 0) or 0)
+            for slot in SLOTS:
+                counts[(invoice, seq, slot)] = len(trip.get(slot) or [])
+    return counts
+
+
+def validate_unique_slots(
+    record: dict[str, Any], payload: dict[str, Any], existing_counts: dict[tuple[str, int, str], int]
+) -> None:
     if payload.get("agent") == BEARING_AGENT and payload.get("allow_multiple_same_slot"):
         return
     for invoice, entry in record.get("发票映射", {}).items():
         for slot in SLOTS:
             images = list(entry.get(slot) or [])
-            if len(images) > 1:
+            if len(images) > max(1, existing_counts.get((invoice, 0, slot), 0)):
                 raise ActionError(f"{invoice} has multiple {slot}: {images}")
         for trip in entry.get("行程明细", []) or []:
             seq = trip.get("行程序号")
             for slot in SLOTS:
                 images = list(trip.get(slot) or [])
-                if len(images) > 1:
+                if len(images) > max(1, existing_counts.get((invoice, int(seq or 0), slot), 0)):
                     raise ActionError(f"{invoice} trip {seq} has multiple {slot}: {images}")
 
 
@@ -222,6 +236,7 @@ def apply_payload(record: dict[str, Any], payload: dict[str, Any], invoice_keys:
     actions = payload.get("actions")
     if not isinstance(actions, list):
         raise ActionError("action file must contain an actions list")
+    existing_counts = slot_counts(record)
     changes: list[str] = []
     for index, action in enumerate(actions, start=1):
         if not isinstance(action, dict):
@@ -230,7 +245,7 @@ def apply_payload(record: dict[str, Any], payload: dict[str, Any], invoice_keys:
             changes.extend(apply_action(record, payload, action, invoice_keys, root))
         except ActionError as exc:
             raise ActionError(f"action #{index}: {exc}") from exc
-    validate_unique_slots(record, payload)
+    validate_unique_slots(record, payload, existing_counts)
     return changes
 
 
