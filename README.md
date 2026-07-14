@@ -52,8 +52,6 @@ Copy-Item -Force agents\fix-invoice-errors.windows.md .opencode\agents\fix-invoi
 - `支付说明生成结果.md`（存在相应分组时）
 - `Hello World 2026报账单填写结果.xlsx`
 - `Hello World 2026支出记录填写结果.docx`
-- `支付说明与支付记录.zip`（存在支付材料时）
-- `辰景发票.zip`（存在辰景发票时）
 - `合并发票_纵向居中.pdf`
 
 代理内部技术文件统一位于 `报销工作文件/`：

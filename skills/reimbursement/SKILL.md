@@ -37,7 +37,6 @@ description: "Trigger when the user indicates they are executing the reimburseme
 - `支付说明生成结果.md`（存在相应分组时）
 - `Hello World 2026报账单填写结果.xlsx`
 - `Hello World 2026支出记录填写结果.docx`
-- `支付说明与支付记录.zip`、`辰景发票.zip`（有内容时）
 - `合并发票_纵向居中.pdf`
 
 `报销工作文件/` 仅保存代理内部文件：
@@ -148,6 +147,8 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 - 根目录 `支付说明生成结果.md`（存在需要确认或查看的分组时保留）
 - 根目录 `Hello World 2026报账单填写结果.xlsx`
 
+报账单的“数量”和“单价”按以下规则填写：从原发票 PDF 读取第一条项目的数量；数量为非整数时取 `int`，数量栏为空时填 `1`；单价填写“价税合计金额 ÷ 处理后的数量”。处理后的数量必须大于 0，单价不得超过 1000 元，否则停止并报告。
+
 支付说明仅以 `invoice_errors.json` 中明确要求同时添加支付说明与支付记录的分组为入口。无法可靠确定收款方时停止该组，不猜测。
 
 上述 DOCX 与 XLSX 命令完成后、进入步骤 7 前，必须立即读取最新的 `支出记录OCR整理结果.md` 和 `匹配记录.json`，向用户告知截图匹配缺口：
@@ -158,21 +159,16 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 - 另列出仍在 `未匹配截图[]` 中的每张截图原路径和原因，确保用户能精确定位需要核对的图片。
 - 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续打包流程，除非用户要求暂停。
 
-### 7. 打包与合并 PDF
+### 7. 合并 PDF
 
 ```bash
-.venv/bin/python .opencode/skills/reimbursement/scripts/package_final_outputs.py --root .
 .venv/bin/python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
 ```
 
-`package_final_outputs.py`：
-
-- 将 `报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 打包为根目录 `支付说明与支付记录.zip`。
-- 将 `output/4_辰景发票/` 中的 PDF 打包为根目录 `辰景发票.zip`。
-- 空内容不生成 ZIP，并删除残留的同名旧 ZIP。
+不自动生成 ZIP。`报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 可能仍含 `xxx` 占位名称，用户填写姓名并按需改名后自行压缩；`output/4_辰景发票/` 中的 PDF 也由用户确认后自行压缩。
 
 `merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`，生成根目录 `合并发票_纵向居中.pdf`。
 
 ### 8. 验证
 
-确认最终 DOCX/XLSX/ZIP 可作为 ZIP 打开；ZIP 仅包含目标 DOCX/PDF。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`，且空材料不会留下旧 ZIP。
+确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。

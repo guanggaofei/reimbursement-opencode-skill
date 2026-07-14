@@ -29,7 +29,7 @@ description: "Trigger when the user indicates they are executing the reimburseme
 
 ## 文件布局
 
-根目录保存 `invoices/`、`images/`、`output/`、三个发票 JSON、`OCR缓存.json`、`匹配记录.json`、历史报账单、`支出记录OCR整理结果.md`、`待审核截图/`、两份最终 Office 文件、可选 ZIP、可选支付说明报告和合并 PDF。
+根目录保存 `invoices/`、`images/`、`output/`、三个发票 JSON、`OCR缓存.json`、`匹配记录.json`、历史报账单、`支出记录OCR整理结果.md`、`待审核截图/`、两份最终 Office 文件、可选支付说明报告和合并 PDF。
 
 `报销工作文件/` 保存 `invoice_errors_raw.json`、`invoice_fixes.json`、`行程单数据.json`、OCR 匹配明细、DOCX 技术报告、action JSON、未打包的支付材料和解包/XML 调试文件。
 
@@ -105,6 +105,8 @@ Set-Location -LiteralPath 'C:\实际的项目根目录'; & .\.venv\Scripts\pytho
 
 最终 DOCX/XLSX 和需要保留的支付说明报告位于根目录；支付记录、支付说明、DOCX 技术报告及解包调试文件位于 `报销工作文件/`。
 
+报账单的“数量”和“单价”按以下规则填写：从原发票 PDF 读取第一条项目的数量；数量为非整数时取 `int`，数量栏为空时填 `1`；单价填写“价税合计金额 ÷ 处理后的数量”。处理后的数量必须大于 0，单价不得超过 1000 元，否则停止并报告。
+
 上述 DOCX 与 XLSX 命令完成后、进入步骤 5 前，必须立即读取最新的 `支出记录OCR整理结果.md` 和 `匹配记录.json`，向用户告知截图匹配缺口：
 
 - 逐张列出完全未匹配或截图不完整的发票，包括 `invoices/<原发票文件名>`、输出中的发票文件名、金额和缺失位置（`支付记录` 或 `账单截图`）。
@@ -113,15 +115,14 @@ Set-Location -LiteralPath 'C:\实际的项目根目录'; & .\.venv\Scripts\pytho
 - 另列出仍在 `未匹配截图[]` 中的每张截图原路径和原因，确保用户能精确定位需要核对的图片。
 - 即使没有缺口，也要明确告知“所有发票截图已完整匹配”。该告知是进度通知，不中断后续打包流程，除非用户要求暂停。
 
-### 5. 打包和合并
+### 5. 合并 PDF
 
 ```powershell
-.\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\package_final_outputs.py --root .
 .\.venv\Scripts\python.exe .opencode\skills\reimbursement\scripts\merge_output_pdfs.py --root .
 ```
 
-支付材料 DOCX 打包为根目录 `支付说明与支付记录.zip`；`output/4_辰景发票/` 的 PDF 打包为根目录 `辰景发票.zip`。空内容不会生成 ZIP，并会删除旧 ZIP。合并脚本只读取 `output/1_材料费/` 和 `output/2_打车费/`，在根目录生成 `合并发票_纵向居中.pdf`。
+不自动生成 ZIP。`报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 可能仍含 `xxx` 占位名称，用户填写姓名并按需改名后自行压缩；`output/4_辰景发票/` 中的 PDF 也由用户确认后自行压缩。合并脚本只读取 `output/1_材料费/` 和 `output/2_打车费/`，在根目录生成 `合并发票_纵向居中.pdf`。
 
 ### 6. 验证
 
-验证 Office 文件和 ZIP 结构；确认 ZIP 仅含目标 DOCX/PDF，`super_invoice.py` 输出名称不变，内部文件均进入 `报销工作文件/`，空材料不会留下旧 ZIP。
+确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认 `super_invoice.py` 输出名称不变，内部文件均进入 `报销工作文件/`。不自动创建任何 ZIP。

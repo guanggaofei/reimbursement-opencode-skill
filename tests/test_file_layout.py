@@ -3,8 +3,10 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
-import zipfile
+from decimal import Decimal
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -13,13 +15,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 from _pathutil import INTERNAL_DIR, resolve_path  # noqa: E402
 from apply_match_actions import ActionError, slot_counts, validate_unique_slots  # noqa: E402
+from generate_reimbursement_xlsx import build_rows, first_item_quantity  # noqa: E402
 from merge_output_pdfs import collect_pdfs  # noqa: E402
-from package_final_outputs import (  # noqa: E402
-    CHENJING_ARCHIVE,
-    PAYMENT_ARCHIVE,
-    package_chenjing_invoices,
-    package_payment_materials,
-)
 
 
 class PathLayoutTests(unittest.TestCase):
@@ -73,47 +70,47 @@ class PathLayoutTests(unittest.TestCase):
                 self.assertIn(declaration, source)
 
 
-class PackagingTests(unittest.TestCase):
-    def test_archives_only_target_docx_and_pdf_files(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            payment = root / INTERNAL_DIR / "支付记录"
-            explanation = root / INTERNAL_DIR / "支付说明"
-            unpacked = explanation / "docx_unpacked"
-            chenjing = root / "output" / "4_辰景发票"
-            for directory in (payment, explanation, unpacked, chenjing):
-                directory.mkdir(parents=True, exist_ok=True)
+class ReimbursementXlsxTests(unittest.TestCase):
+    @patch("generate_reimbursement_xlsx.subprocess.run")
+    def test_first_item_quantity_truncates_decimal(self, run: unittest.mock.Mock) -> None:
+        run.return_value = CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="项目名称              数 量       单价\n螺丝                  2.9        10.00\n合计\n",
+            stderr="",
+        )
 
-            (payment / "record.docx").write_bytes(b"docx")
-            (explanation / "explanation.docx").write_bytes(b"docx")
-            (unpacked / "debug.docx").write_bytes(b"debug")
-            (root / INTERNAL_DIR / "agent.actions.json").write_text("{}", encoding="utf-8")
-            (explanation / "report.md").write_text("report", encoding="utf-8")
-            (chenjing / "invoice.pdf").write_bytes(b"pdf")
-            (chenjing / "notes.md").write_text("notes", encoding="utf-8")
+        self.assertEqual(first_item_quantity(Path("example.pdf")), Decimal("2"))
 
-            payment_zip = root / PAYMENT_ARCHIVE
-            chenjing_zip = root / CHENJING_ARCHIVE
-            self.assertTrue(package_payment_materials(root, payment_zip))
-            self.assertTrue(package_chenjing_invoices(root, chenjing_zip))
+    @patch("generate_reimbursement_xlsx.first_item_quantity", return_value=Decimal("2"))
+    def test_build_rows_sets_quantity_and_unit_price(self, _quantity: unittest.mock.Mock) -> None:
+        invoices = [{
+            "文件名": "example.pdf",
+            "更新后文件名": "1_example.pdf",
+            "价税合计金额": 39.04,
+            "发票号码": "123",
+            "行程单文件名": "无需",
+            "项目列表": [{"项目名称": "螺丝"}],
+        }]
 
-            with zipfile.ZipFile(payment_zip) as archive:
-                self.assertEqual(archive.namelist(), ["支付记录/record.docx", "支付说明/explanation.docx"])
-            with zipfile.ZipFile(chenjing_zip) as archive:
-                self.assertEqual(archive.namelist(), ["invoice.pdf"])
+        rows = build_rows(Path("."), invoices, {})
 
-    def test_empty_sources_remove_stale_archives(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            payment_zip = root / PAYMENT_ARCHIVE
-            chenjing_zip = root / CHENJING_ARCHIVE
-            payment_zip.write_bytes(b"stale")
-            chenjing_zip.write_bytes(b"stale")
+        self.assertEqual(rows[0]["quantity"], "2")
+        self.assertEqual(rows[0]["unit_price"], "19.520000")
 
-            self.assertFalse(package_payment_materials(root, payment_zip))
-            self.assertFalse(package_chenjing_invoices(root, chenjing_zip))
-            self.assertFalse(payment_zip.exists())
-            self.assertFalse(chenjing_zip.exists())
+    @patch("generate_reimbursement_xlsx.first_item_quantity", return_value=Decimal("1"))
+    def test_build_rows_rejects_unit_price_over_1000(self, _quantity: unittest.mock.Mock) -> None:
+        invoices = [{
+            "文件名": "example.pdf",
+            "更新后文件名": "1_example.pdf",
+            "价税合计金额": 1000.01,
+            "发票号码": "123",
+            "行程单文件名": "无需",
+            "项目列表": [{"项目名称": "螺丝"}],
+        }]
+
+        with self.assertRaises(RuntimeError):
+            build_rows(Path("."), invoices, {})
 
 
 class MatchActionValidationTests(unittest.TestCase):

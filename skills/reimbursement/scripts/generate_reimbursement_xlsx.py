@@ -27,6 +27,7 @@ import argparse
 import copy
 import json
 import re
+import subprocess
 import zipfile
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -68,6 +69,8 @@ COLS = {
     "content": "D",
     "project": "E",
     "category": "F",
+    "quantity": "G",
+    "unit_price": "H",
     "amount": "I",
     "invoice_no": "K",
 }
@@ -79,6 +82,47 @@ def read_json(path: Path) -> Any:
 
 def money_text(value: Any) -> str:
     return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):.2f}"
+
+
+def first_item_quantity(pdf_path: Path) -> Decimal:
+    result = subprocess.run(
+        ["pdftotext", "-layout", str(pdf_path), "-"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"pdftotext failed for {pdf_path.name}: {result.stderr.strip()}")
+
+    lines = result.stdout.splitlines()
+    header_index = next(
+        (index for index, line in enumerate(lines) if "项目名称" in line and re.search(r"数\s*量", line)),
+        None,
+    )
+    if header_index is None:
+        return Decimal(1)
+
+    quantity_header = re.search(r"数\s*量", lines[header_index])
+    if quantity_header is None:
+        return Decimal(1)
+    quantity_center = (quantity_header.start() + quantity_header.end()) / 2
+
+    for line in lines[header_index + 1:]:
+        if re.search(r"合\s*计|价税合计|小计", line):
+            break
+        numbers = list(re.finditer(r"(?<![A-Za-z0-9])\d[\d,]*(?:\.\d+)?", line))
+        if not numbers:
+            continue
+        closest = min(numbers, key=lambda match: abs((match.start() + match.end()) / 2 - quantity_center))
+        distance = abs((closest.start() + closest.end()) / 2 - quantity_center)
+        if distance <= 7:
+            parsed = Decimal(closest.group().replace(",", ""))
+            quantity = Decimal(int(parsed))
+            if quantity <= 0:
+                raise RuntimeError(f"invalid first item quantity in {pdf_path.name}: {parsed}")
+            return quantity
+
+    return Decimal(1)
 
 
 def is_taxi_invoice(inv: dict[str, Any]) -> bool:
@@ -118,17 +162,26 @@ def read_purchase_dates_from_record(path: Path, invoices: list[dict[str, Any]]) 
     return dates
 
 
-def build_rows(invoices: list[dict[str, Any]], purchase_dates: dict[str, str]) -> list[dict[str, str]]:
+def build_rows(root: Path, invoices: list[dict[str, Any]], purchase_dates: dict[str, str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for inv in invoices:
         updated_file = str(inv.get("更新后文件名") or "")
         taxi = is_taxi_invoice(inv)
+        amount = Decimal(money_text(inv.get("价税合计金额")))
+        quantity = first_item_quantity(root / "invoices" / str(inv.get("文件名") or ""))
+        unit_price = (amount / quantity).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        if unit_price > Decimal("1000"):
+            raise RuntimeError(
+                f"unit price exceeds 1000 for {inv.get('文件名')}: {amount} / {quantity} = {unit_price}"
+            )
         rows.append({
             "date": purchase_dates.get(updated_file, ""),
             "content": expense_content(inv),
             "project": "差旅" if taxi else "步兵机器人",
             "category": "差旅费" if taxi else "机械标准件",
-            "amount": money_text(inv.get("价税合计金额")),
+            "quantity": str(quantity),
+            "unit_price": format(unit_price, "f"),
+            "amount": format(amount, "f"),
             "invoice_no": str(inv.get("发票号码") or ""),
         })
     return rows
@@ -226,6 +279,8 @@ def fill_row(row: etree._Element, row_index: int, data: dict[str, str]) -> None:
     set_text(cells[COLS["content"]], data["content"])
     set_text(cells[COLS["project"]], data["project"])
     set_text(cells[COLS["category"]], data["category"])
+    set_number(cells[COLS["quantity"]], Decimal(data["quantity"]))
+    set_number(cells[COLS["unit_price"]], Decimal(data["unit_price"]))
     set_number(cells[COLS["amount"]], Decimal(data["amount"]))
     formula, cached = invoice_number_formula(f'="{data["invoice_no"]}"')
     set_formula_string(cells[COLS["invoice_no"]], formula, cached)
@@ -241,7 +296,7 @@ def generate(args: argparse.Namespace) -> None:
     if not match_record.exists():
         raise RuntimeError(f"match record not found: {match_record}")
     purchase_dates = read_purchase_dates_from_record(match_record, invoices)
-    rows = build_rows(invoices, purchase_dates)
+    rows = build_rows(root, invoices, purchase_dates)
 
     files = read_zip(resolve_path(root, args.template))
     root = etree.fromstring(files[SHEET_PATH])
