@@ -22,7 +22,7 @@ description: "Trigger when the user indicates they are executing the reimburseme
 缺少 Python 包时，先向用户列出缺少的包、用途和完整安装命令并等待批准。完整环境安装命令为：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install pdfplumber rapidocr-onnxruntime onnxruntime Pillow pypinyin pypdf python-docx lxml
+.\.venv\Scripts\python.exe -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pdfplumber rapidocr-onnxruntime onnxruntime Pillow pypinyin pypdf python-docx lxml
 ```
 
 只缺少部分包时仅安装缺少项，不重复安装全部依赖。所有 Python 脚本必须通过 `.\.venv\Scripts\python.exe` 调用，禁止使用系统 `python` 或 `python3`。
