@@ -15,7 +15,10 @@ description: "Trigger when the user indicates they are executing the reimburseme
 
 ## 环境
 
-使用项目 `.venv`。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext` 和 `pdftoppm`。
+先运行 `python3 --version`，确认 Python 为 3.10 或更高版本且可使用 `venv` 和 `pip`。使用项目 `.venv`；不存在时运行 `python3 -m venv .venv`，创建失败时停止并报告。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`。
+
+开始流程前确认 `pdftotext` 和 `pdftoppm` 均可执行；任一缺失时停止并告知用户需要安装 Poppler，不自行安装系统软件。
+源 PDF 使用未嵌入的中文字体时，Poppler 必须能访问对应字体；出现字体创建失败时停止并报告具体 PDF，不继续生成缺字文档。
 
 缺少 Python 包时，先向用户列出缺少的包、用途和完整安装命令并等待批准。完整环境安装命令为：
 
@@ -118,7 +121,7 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 
 新增少量截图时也由用户按上述方式运行单行命令，并在末尾添加 `--scan-only`。
 
-截图匹配 subagent 必须视觉识别优先：OCR 只用于定位候选，最终归属必须由 subagent 使用 Read 直接查看原始截图后，根据可见的店铺、商品、服务商、时间、路线或订单号判断。除 `fix-bearing-invoice` 中明确要求的纯金额组合计算外，禁止 subagent 使用 Python、自动相似度或自编脚本决定归属。subagent 只写 action JSON，不自行应用；由主流程统一执行：
+subagent 只写 action JSON，不自行应用；由主流程统一执行：
 
 ```bash
 .venv/bin/python .opencode/skills/reimbursement/scripts/apply_match_actions.py --root . --actions 报销工作文件/<agent-name>.actions.json
@@ -153,14 +156,7 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 .venv/bin/python .opencode/skills/reimbursement/scripts/generate_reimbursement_xlsx.py --root .
 ```
 
-生成位置：
-
-- 根目录 `Hello World 2026支出记录填写结果.docx`
-- `报销工作文件/支出记录DOCX生成结果.md`
-- `报销工作文件/支付记录/*.docx`
-- `报销工作文件/支付说明/*.docx` 及其解包调试目录
-- 根目录 `支付说明生成结果.md`（存在需要确认或查看的分组时保留）
-- 根目录 `Hello World 2026报账单填写结果.xlsx`
+两份最终 Office 文件位于根目录；支付记录、支付说明及技术/调试文件位于 `报销工作文件/`；仅在存在需要确认或查看的分组时，在根目录保留 `支付说明生成结果.md`。
 
 报账单的“数量”和“单价”按以下规则填写：从原发票 PDF 读取第一条项目的数量；数量为非整数时取 `int`，数量栏为空时填 `1`；单价填写“价税合计金额 ÷ 处理后的数量”。处理后的数量必须大于 0，单价不得超过 1000 元，否则停止并报告。
 
@@ -180,10 +176,8 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 .venv/bin/python .opencode/skills/reimbursement/scripts/merge_output_pdfs.py --root .
 ```
 
-不自动生成 ZIP。`报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 可能仍含 `xxx` 占位名称，用户填写姓名并按需改名后自行压缩；`output/4_辰景发票/` 中的 PDF 也由用户确认后自行压缩。
-
-`merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`。它通过 `pdftoppm` 按 CropBox 将源 PDF 的每页先渲染为图片，再将图片居中放入全新的 A4 页面，不直接合并或嵌入源 PDF 页面对象，最后生成根目录 `合并发票_纵向居中.pdf`。默认渲染分辨率为 200 DPI，可通过 `--dpi` 调整。每个发票 PDF 的每一页均在标题正上方标记该发票序号，并添加两条各 3 cm 的签名线；同一张多页发票使用相同序号，行程单页不添加标记。
+命令完成后，提示用户检查 `报销工作文件/支付记录/` 和 `报销工作文件/支付说明/` 中的 DOCX，将文件名及文档内容里的 `xxx` 改为自己的姓名。
 
 ### 8. 验证
 
-确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认合并 PDF 全部为 A4，页内容为单张栅格图片而非源 PDF 页面对象，所有发票页均带正确序号和两条 3 cm 签名线、所有行程单页均无标记，并重点渲染检查原始 CropBox 异常页。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。
+确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认合并 PDF 可正常打开且页面内容完整。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。

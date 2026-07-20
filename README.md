@@ -4,6 +4,13 @@
 
 ## 安装
 
+### 运行环境
+
+- Python 3.10 或更高版本，并确保该解释器可使用 `venv` 和 `pip`。
+- Poppler 提供的 `pdftotext` 和 `pdftoppm` 必须都在 `PATH` 中。Linux 通常安装 `poppler-utils`，macOS 可安装 Homebrew `poppler`。
+- Windows 不自带 Poppler，Poppler 官方也不提供 Windows 安装包。可从社区维护的 [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases/latest) 下载预编译包；其中包含 `Library\bin\pdftotext.exe` 和 `Library\bin\pdftoppm.exe`。解压后将 `Library\bin` 加入 `PATH`，再在 PowerShell 中运行 `Get-Command pdftotext,pdftoppm` 验证两个命令。
+- 源 PDF 使用未嵌入字体时，对应字体必须已安装且对 Poppler 可读；合并脚本会在 Poppler 无法创建字体时停止，避免静默生成缺字 PDF。
+
 ### Agent 安装要求
 
 - Agent 获取本仓库时，必须将 Git 仓库克隆到 `/tmp/reimbursement-opencode-skill`，不得克隆到用户的报销项目目录或其他长期保存目录：
@@ -64,4 +71,4 @@ Copy-Item -Force agents\fix-invoice-errors.windows.md .opencode\agents\fix-invoi
 
 `super_invoice.py` 的输出契约保持不变：它仍在根目录写入三个 JSON，并写入根目录 `output/`；不复制、改名或迁移这些文件。
 
-合并 PDF 通过 `pdftoppm` 按每页 CropBox 将源 PDF 先渲染为图片，再将图片居中放入全新的 A4 页面，不直接合并或嵌入源 PDF 页面对象。每个发票页在标题上方标记发票序号并预留两条各 3 cm 的签名线；行程单页不添加标记。Linux/macOS 和 Windows 均需安装提供 `pdftotext` 与 `pdftoppm` 的 Poppler。
+合并 PDF 默认以 400 DPI 通过 `pdftoppm` 按每页 CropBox 将源 PDF 先渲染为图片，再将图片居中放入全新的 A4 页面，不直接合并或嵌入源 PDF 页面对象。每个发票页在标题上方标记发票序号并预留两条各 3 cm 的签名线；行程单页不添加标记。

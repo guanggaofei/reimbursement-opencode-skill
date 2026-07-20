@@ -19,6 +19,7 @@ from generate_reimbursement_xlsx import build_rows, first_item_quantity  # noqa:
 from merge_output_pdfs import (  # noqa: E402
     A4_HEIGHT,
     A4_WIDTH,
+    DEFAULT_DPI,
     SIGNATURE_LINE_LENGTH,
     add_image_page,
     add_invoice_header,
@@ -179,6 +180,9 @@ class ScreenshotIssueSummaryTests(unittest.TestCase):
 
 
 class MergedPdfLayoutTests(unittest.TestCase):
+    def test_default_rasterization_is_400_dpi(self) -> None:
+        self.assertEqual(DEFAULT_DPI, 400)
+
     def test_invoice_sequence_excludes_trip_sheet(self) -> None:
         self.assertEqual(invoice_sequence(Path("47_价税合计_25_00_发票.pdf")), 47)
         self.assertIsNone(invoice_sequence(Path("47_价税合计_25_00_行程单.pdf")))
@@ -210,12 +214,28 @@ class MergedPdfLayoutTests(unittest.TestCase):
                 patch("merge_output_pdfs.shutil.which", return_value="/usr/bin/pdftoppm"),
                 patch("merge_output_pdfs.subprocess.run") as run,
             ):
+                run.return_value = CompletedProcess(args=[], returncode=0, stdout="", stderr="")
                 pages = render_pdf_pages(Path("invoice.pdf"), output_dir, dpi=200)
 
             command = run.call_args.args[0]
             self.assertEqual(pages, [output_dir / "page-1.png"])
             self.assertIn("-cropbox", command)
             self.assertEqual(command[command.index("-r") + 1], "200")
+
+    def test_pdftoppm_font_failure_stops_the_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("merge_output_pdfs.shutil.which", return_value="pdftoppm"),
+                patch("merge_output_pdfs.subprocess.run") as run,
+            ):
+                run.return_value = CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="",
+                    stderr="Syntax Error: Couldn't create a font for 'SimSun'",
+                )
+                with self.assertRaisesRegex(SystemExit, "could not render fonts"):
+                    render_pdf_pages(Path("invoice.pdf"), Path(tmp), dpi=400)
 
     def test_output_page_contains_one_raster_image_on_exact_a4(self) -> None:
         from PIL import Image

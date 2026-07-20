@@ -19,6 +19,7 @@ A4_HEIGHT = 841.8897637795277
 CM_TO_POINTS = 72 / 2.54
 SIGNATURE_LINE_LENGTH = 3 * CM_TO_POINTS
 HEADER_FONT_SIZE = 12.0
+DEFAULT_DPI = 400
 
 
 def natural_key(path: Path) -> list[object]:
@@ -56,10 +57,17 @@ def render_pdf_pages(pdf: Path, output_dir: Path, dpi: int) -> list[Path]:
         str(pdf),
         str(prefix),
     ]
-    try:
-        subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
-    except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"failed to render {pdf} with pdftoppm") from exc
+    result = subprocess.run(
+        command,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"failed to render {pdf} with pdftoppm: {result.stderr.strip()}")
+    if "Couldn't create a font" in result.stderr:
+        raise SystemExit(f"pdftoppm could not render fonts in {pdf}: {result.stderr.strip()}")
 
     pages = sorted(output_dir.glob("page-*.png"), key=natural_key)
     if not pages:
@@ -216,7 +224,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=Path("合并发票_纵向居中.pdf"), help="Merged PDF path")
     parser.add_argument("--margin-x", type=float, default=0.0, help="Left/right margin in PDF points")
     parser.add_argument("--margin-y", type=float, default=72.0, help="Top/bottom margin in PDF points")
-    parser.add_argument("--dpi", type=int, default=200, help="Source-page rasterization resolution")
+    parser.add_argument("--dpi", type=int, default=DEFAULT_DPI, help="Source-page rasterization resolution")
     parser.add_argument("--jpeg-quality", type=int, default=92, help="Embedded page image JPEG quality (1-100)")
     args = parser.parse_args()
     if args.dpi <= 0:
