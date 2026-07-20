@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import sys
 import tempfile
 import unittest
@@ -21,15 +20,14 @@ from merge_output_pdfs import (  # noqa: E402
     A4_HEIGHT,
     A4_WIDTH,
     SIGNATURE_LINE_LENGTH,
-    center_page_on_a4,
+    add_image_page,
+    add_invoice_header,
+    center_image_on_a4,
     collect_pdfs,
-    invoice_header_overlay,
     invoice_sequence,
+    render_pdf_pages,
 )
 from verify_screenshot_coverage import build_issue_summary  # noqa: E402
-
-from pypdf._page import PageObject  # noqa: E402
-from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject, RectangleObject  # noqa: E402
 
 
 class PathLayoutTests(unittest.TestCase):
@@ -186,55 +184,64 @@ class MergedPdfLayoutTests(unittest.TestCase):
         self.assertIsNone(invoice_sequence(Path("47_价税合计_25_00_行程单.pdf")))
 
     def test_header_has_sequence_and_two_three_centimeter_lines(self) -> None:
-        overlay = invoice_header_overlay(47, 700)
-        operations = overlay.get_contents().operations
-        line_lengths = []
-        markers = []
-        for index, (operands, operator) in enumerate(operations):
-            if operator == b"m" and index + 1 < len(operations) and operations[index + 1][1] == b"l":
-                next_operands = operations[index + 1][0]
-                line_lengths.append(math.hypot(
-                    float(next_operands[0]) - float(operands[0]),
-                    float(next_operands[1]) - float(operands[1]),
-                ))
-            if operator == b"Tj":
-                markers.append(str(operands[0]))
+        from PIL import Image
 
-        self.assertEqual(markers, ["47"])
-        self.assertEqual(len(line_lengths), 2)
-        for length in line_lengths:
-            self.assertAlmostEqual(length, SIGNATURE_LINE_LENGTH, places=5)
+        image = Image.new("RGB", (600, 300), "white")
+        add_invoice_header(image, 47, content_top=200, dpi=72)
+        line_y = 176
+        black_pixels = [x for x in range(image.width) if image.getpixel((x, line_y)) == (0, 0, 0)]
+        runs = []
+        for x in black_pixels:
+            if not runs or x > runs[-1][1] + 1:
+                runs.append([x, x])
+            else:
+                runs[-1][1] = x
+        signature_lines = [run for run in runs if run[1] - run[0] >= 80]
 
-    def test_cropbox_and_annotations_are_transformed_together(self) -> None:
-        source = PageObject.create_blank_page(width=600, height=800)
-        source.cropbox = RectangleObject((0, 400, 600, 800))
-        annotation = DictionaryObject({
-            NameObject("/Subtype"): NameObject("/Square"),
-            NameObject("/Rect"): RectangleObject((100, 500, 200, 600)),
-            NameObject("/Path"): ArrayObject([
-                ArrayObject(FloatObject(value) for value in (50, 450, 150, 550)),
-            ]),
-        })
-        source[NameObject("/Annots")] = ArrayObject([annotation])
+        self.assertEqual(len(signature_lines), 2)
+        for start, end in signature_lines:
+            self.assertEqual(end - start, round(SIGNATURE_LINE_LENGTH))
 
-        target, content_top = center_page_on_a4(source, margin_x=0, margin_y=72)
-        scale = min(A4_WIDTH / 600, (A4_HEIGHT - 144) / 400)
-        target_x = (A4_WIDTH - 600 * scale) / 2
-        target_y = (A4_HEIGHT - 400 * scale) / 2
-        rect = target["/Annots"][0].get_object()["/Rect"]
+    def test_pdftoppm_renders_the_cropbox(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "page-1.png").write_bytes(b"rendered")
+            with (
+                patch("merge_output_pdfs.shutil.which", return_value="/usr/bin/pdftoppm"),
+                patch("merge_output_pdfs.subprocess.run") as run,
+            ):
+                pages = render_pdf_pages(Path("invoice.pdf"), output_dir, dpi=200)
 
-        self.assertAlmostEqual(float(target.mediabox.width), A4_WIDTH, places=5)
-        self.assertAlmostEqual(float(target.mediabox.height), A4_HEIGHT, places=5)
-        self.assertAlmostEqual(content_top, target_y + 400 * scale, places=5)
-        self.assertAlmostEqual(float(rect[0]), 100 * scale + target_x, places=5)
-        self.assertAlmostEqual(float(rect[1]), (500 - 400) * scale + target_y, places=5)
-        self.assertAlmostEqual(float(rect[2]), 200 * scale + target_x, places=5)
-        self.assertAlmostEqual(float(rect[3]), (600 - 400) * scale + target_y, places=5)
-        path = target["/Annots"][0].get_object()["/Path"][0]
-        self.assertAlmostEqual(float(path[0]), 50 * scale + target_x, places=5)
-        self.assertAlmostEqual(float(path[1]), (450 - 400) * scale + target_y, places=5)
-        self.assertAlmostEqual(float(path[2]), 150 * scale + target_x, places=5)
-        self.assertAlmostEqual(float(path[3]), (550 - 400) * scale + target_y, places=5)
+            command = run.call_args.args[0]
+            self.assertEqual(pages, [output_dir / "page-1.png"])
+            self.assertIn("-cropbox", command)
+            self.assertEqual(command[command.index("-r") + 1], "200")
+
+    def test_output_page_contains_one_raster_image_on_exact_a4(self) -> None:
+        from PIL import Image
+        from pypdf import PdfReader, PdfWriter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_path = root / "source.png"
+            Image.new("RGB", (600, 400), "red").save(source_path)
+            image = center_image_on_a4(source_path, margin_x=0, margin_y=72, dpi=72, sequence=None)
+            writer = PdfWriter()
+            add_image_page(writer, image, jpeg_quality=92)
+            image.close()
+            output_path = root / "output.pdf"
+            with output_path.open("wb") as output:
+                writer.write(output)
+
+            page = PdfReader(output_path).pages[0]
+            xobjects = page["/Resources"]["/XObject"]
+            images = [ref.get_object() for ref in xobjects.values() if ref.get_object()["/Subtype"] == "/Image"]
+            operators = [operator for _, operator in page.get_contents().operations]
+
+            self.assertAlmostEqual(float(page.mediabox.width), A4_WIDTH, places=5)
+            self.assertAlmostEqual(float(page.mediabox.height), A4_HEIGHT, places=5)
+            self.assertEqual(len(images), 1)
+            self.assertEqual(operators, [b"q", b"cm", b"Do", b"Q"])
 
 
 if __name__ == "__main__":

@@ -64,4 +64,4 @@ Copy-Item -Force agents\fix-invoice-errors.windows.md .opencode\agents\fix-invoi
 
 `super_invoice.py` 的输出契约保持不变：它仍在根目录写入三个 JSON，并写入根目录 `output/`；不复制、改名或迁移这些文件。
 
-合并 PDF 使用每页 CropBox 作为可见内容边界居中到 A4。每个发票页在标题上方标记发票序号并预留两条各 3 cm 的签名线；行程单页不添加标记。
+合并 PDF 通过 `pdftoppm` 按每页 CropBox 将源 PDF 先渲染为图片，再将图片居中放入全新的 A4 页面，不直接合并或嵌入源 PDF 页面对象。每个发票页在标题上方标记发票序号并预留两条各 3 cm 的签名线；行程单页不添加标记。Linux/macOS 和 Windows 均需安装提供 `pdftotext` 与 `pdftoppm` 的 Poppler。

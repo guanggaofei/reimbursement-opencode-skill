@@ -15,7 +15,7 @@ description: "Trigger when the user indicates they are executing the reimburseme
 
 ## 环境
 
-使用项目 `.venv`。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext`。
+使用项目 `.venv`。所需 Python 包包括 `pdfplumber`、`rapidocr-onnxruntime`、`onnxruntime`、`Pillow`、`pypinyin`、`pypdf`、`python-docx`、`lxml`；系统需提供 `pdftotext` 和 `pdftoppm`。
 
 缺少 Python 包时，先向用户列出缺少的包、用途和完整安装命令并等待批准。完整环境安装命令为：
 
@@ -182,8 +182,8 @@ cd "/实际的项目根目录" && .venv/bin/python .opencode/skills/reimbursemen
 
 不自动生成 ZIP。`报销工作文件/支付记录/` 与 `报销工作文件/支付说明/` 中的 DOCX 可能仍含 `xxx` 占位名称，用户填写姓名并按需改名后自行压缩；`output/4_辰景发票/` 中的 PDF 也由用户确认后自行压缩。
 
-`merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`，以每页 CropBox 作为可见内容边界居中到 A4，生成根目录 `合并发票_纵向居中.pdf`。每个发票 PDF 的每一页均在标题正上方标记该发票序号，并添加两条各 3 cm 的签名线；同一张多页发票使用相同序号，行程单页不添加标记。
+`merge_output_pdfs.py` 只读取根目录 `output/1_材料费/` 和 `output/2_打车费/`。它通过 `pdftoppm` 按 CropBox 将源 PDF 的每页先渲染为图片，再将图片居中放入全新的 A4 页面，不直接合并或嵌入源 PDF 页面对象，最后生成根目录 `合并发票_纵向居中.pdf`。默认渲染分辨率为 200 DPI，可通过 `--dpi` 调整。每个发票 PDF 的每一页均在标题正上方标记该发票序号，并添加两条各 3 cm 的签名线；同一张多页发票使用相同序号，行程单页不添加标记。
 
 ### 8. 验证
 
-确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认合并 PDF 全部为 A4，所有发票页均带正确序号和两条 3 cm 签名线、所有行程单页均无标记，并重点渲染检查原始 CropBox 异常页。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。
+确认最终 DOCX/XLSX 可作为 ZIP 打开。确认报账单中每行数量和单价已填写、数量为正数、单价不超过 1000 元，且数量乘单价与发票金额在允许精度内一致。确认合并 PDF 全部为 A4，页内容为单张栅格图片而非源 PDF 页面对象，所有发票页均带正确序号和两条 3 cm 签名线、所有行程单页均无标记，并重点渲染检查原始 CropBox 异常页。确认 `super_invoice.py` 的四类输出目录和三个 JSON 文件名未改变，内部文件均位于 `报销工作文件/`。不自动创建任何 ZIP。
